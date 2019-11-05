@@ -23,9 +23,10 @@ type PKI struct {
 }
 
 type PKIMon struct {
-	pkis  map[string]*PKI
-	vault *vaultapi.Client
-	mux   sync.Mutex
+	pkis   map[string]*PKI
+	vault  *vaultapi.Client
+	mux    sync.Mutex
+	Loaded bool
 }
 
 func (mon *PKIMon) Init(vault *vaultapi.Client) error {
@@ -59,7 +60,7 @@ func (mon *PKIMon) loadPKI() error {
 	return nil
 }
 
-func (mon *PKIMon) Watch() {
+func (mon *PKIMon) Watch(interval time.Duration) {
 	log.Infoln("Start watching pki certs")
 	go func() {
 		for {
@@ -76,7 +77,8 @@ func (mon *PKIMon) Watch() {
 					log.Errorln(err)
 				}
 			}
-			time.Sleep(time.Minute)
+			mon.Loaded = true
+			time.Sleep(interval)
 		}
 	}()
 }

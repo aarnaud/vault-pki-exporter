@@ -7,6 +7,7 @@ import (
 	vaultMon "github.com/aarnaud/vault-pki-mon/pkg/vault-mon"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"time"
 )
 
 var version string
@@ -49,6 +50,16 @@ func init() {
 	if err := viper.BindPFlag("port", flags.Lookup("port")); err != nil {
 		log.Fatal(err)
 	}
+
+	flags.Duration("fetch-interval", time.Minute, "How many sec between fetch certs on vault")
+	if err := viper.BindPFlag("fetch_interval", flags.Lookup("fetch-interval")); err != nil {
+		log.Fatal(err)
+	}
+
+	flags.Duration("refresh-interval", time.Minute, "How many sec between metrics update")
+	if err := viper.BindPFlag("refresh_interval", flags.Lookup("refresh-interval")); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
@@ -69,17 +80,15 @@ func entrypoint() {
 		log.Errorln(err.Error())
 	}
 
-	pkiMon.Watch()
+	pkiMon.Watch(viper.GetDuration("fetch_interval"))
 
 	if viper.GetBool("prometheus") || !viper.GetBool("influx") {
 		log.Infoln("start prometheus exporter")
-		vaultMon.PromWatchCerts(&pkiMon)
-		go vaultMon.PromStartExporter(viper.GetInt("port"))
+		vaultMon.PromWatchCerts(&pkiMon, viper.GetDuration("refresh_interval"))
+		vaultMon.PromStartExporter(viper.GetInt("port"))
 	}
 
 	if viper.GetBool("influx") {
-		vaultMon.InfluxWatchCerts(&pkiMon)
+		vaultMon.InfluxWatchCerts(&pkiMon, viper.GetDuration("refresh_interval"), viper.GetBool("prometheus"))
 	}
-
-	select {}
 }

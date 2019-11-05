@@ -30,25 +30,25 @@ type PromMetrics struct {
 	enddate   *prometheus.GaugeVec
 }
 
-func PromWatchCerts(pkimon *PKIMon) {
+func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "x509cert_expiry",
+		Name: "x509_cert_expiry",
 	}, labelNames)
 	age := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "x509cert_age",
+		Name: "x509_cert_age",
 	}, labelNames)
 	startdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "x509cert_startdate",
+		Name: "x509_cert_startdate",
 	}, labelNames)
 	enddate := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "x509cert_enddate",
+		Name: "x509_cert_enddate",
 	}, labelNames)
 
 	crl_expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "x509crl_expiry",
+		Name: "x509_crl_expiry",
 	}, []string{"source"})
 	crl_nextupdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "x509crl_nextupdate",
+		Name: "x509_crl_nextupdate",
 	}, []string{"source"})
 
 	go func() {
@@ -74,7 +74,7 @@ func PromWatchCerts(pkimon *PKIMon) {
 					enddate.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Unix()))
 				}
 			}
-			time.Sleep(time.Minute)
+			time.Sleep(interval)
 		}
 	}()
 

@@ -12,27 +12,40 @@ import (
 
 var hostname string
 
-func InfluxWatchCerts(pkimon *PKIMon) {
+func InfluxWatchCerts(pkimon *PKIMon, interval time.Duration, loop bool) {
 	hostname, _ = os.Hostname()
-	go func() {
-		for {
-			for pkiname, pki := range pkimon.GetPKIs() {
-				if crl := pki.GetCRL(); crl != nil {
-					printCrlInfluxPoint(pkiname, crl)
-				}
-				for _, cert := range pki.GetCerts() {
-					printCertificateInfluxPoint(pkiname, cert)
-				}
+	if loop {
+		go func() {
+			for {
+				influxProcessData(pkimon)
+				time.Sleep(interval)
 			}
+		}()
+	} else {
+		// Wait for all PKI
+		// TODO: use chan for pub/sub
+		for !pkimon.Loaded {
 			time.Sleep(time.Second)
 		}
-	}()
+		influxProcessData(pkimon)
+	}
+}
+
+func influxProcessData(pkimon *PKIMon) {
+	for pkiname, pki := range pkimon.GetPKIs() {
+		if crl := pki.GetCRL(); crl != nil {
+			printCrlInfluxPoint(pkiname, crl)
+		}
+		for _, cert := range pki.GetCerts() {
+			printCertificateInfluxPoint(pkiname, cert)
+		}
+	}
 }
 
 func printCertificateInfluxPoint(pkiname string, cert *x509.Certificate) {
 	now := time.Now()
 	point := influx.Point{
-		Measurement: "x509cert",
+		Measurement: "x509_cert",
 		Tags: map[string]string{
 			"host":                hostname,
 			"source":              pkiname,
@@ -59,7 +72,7 @@ func printCertificateInfluxPoint(pkiname string, cert *x509.Certificate) {
 func printCrlInfluxPoint(pkiname string, crl *pkix.CertificateList) {
 	now := time.Now()
 	point := influx.Point{
-		Measurement: "x509crl",
+		Measurement: "x509_crl",
 		Tags: map[string]string{
 			"host":   hostname,
 			"source": pkiname,
