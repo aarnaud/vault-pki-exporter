@@ -35,8 +35,13 @@ func init() {
 		log.Fatal(err)
 	}
 
-	flags.BoolP("prometheus", "", true, "Enable prometheus exporter")
+	flags.BoolP("prometheus", "", false, "Enable prometheus exporter, default if nothing else")
 	if err := viper.BindPFlag("prometheus", flags.Lookup("prometheus")); err != nil {
+		log.Fatal(err)
+	}
+
+	flags.BoolP("influx", "", false, "Enable InfluxDB Line Protocol")
+	if err := viper.BindPFlag("influx", flags.Lookup("influx")); err != nil {
 		log.Fatal(err)
 	}
 
@@ -66,10 +71,14 @@ func monservice() {
 
 	pkiMon.Watch()
 
-	if viper.GetBool("prometheus") {
+	if viper.GetBool("prometheus") || !viper.GetBool("influx") {
 		log.Infoln("start prometheus exporter")
 		vaultMon.PromWatchCerts(&pkiMon)
 		go vaultMon.PromStartExporter(viper.GetInt("port"))
+	}
+
+	if viper.GetBool("influx") {
+		vaultMon.InfluxWatchCerts(&pkiMon)
 	}
 
 	select {}
