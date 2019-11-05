@@ -19,8 +19,8 @@ func main() {
 
 	pkiMon.Watch()
 
-	//vaultMon.PromWatchCerts(&pkiMon)
-	//vaultMon.PromStartExporter()
+	vaultMon.PromWatchCerts(&pkiMon)
+	vaultMon.PromStartExporter()
 
 	select {}
 }
