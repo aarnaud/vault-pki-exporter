@@ -12,7 +12,7 @@ import (
 var version string
 var cli = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
-		monservice()
+		entrypoint()
 	},
 }
 
@@ -58,7 +58,7 @@ func main() {
 	}
 }
 
-func monservice() {
+func entrypoint() {
 
 	vaultcli := vault.ClientWrapper{}
 	vaultcli.Init()

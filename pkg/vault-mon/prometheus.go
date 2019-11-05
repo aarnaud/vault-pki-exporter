@@ -43,13 +43,30 @@ func PromWatchCerts(pkimon *PKIMon) {
 	enddate := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509cert_enddate",
 	}, labelNames)
+
+	crl_expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "x509crl_expiry",
+	}, []string{"source"})
+	crl_nextupdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "x509crl_nextupdate",
+	}, []string{"source"})
+
 	go func() {
 		for {
 			pkis := pkimon.GetPKIs()
 			expiry.Reset()
+			age.Reset()
+			startdate.Reset()
+			enddate.Reset()
+			crl_expiry.Reset()
+			crl_nextupdate.Reset()
+			now := time.Now()
 			for pkiname, pki := range pkis {
+				if crl := pki.GetCRL(); crl != nil {
+					crl_expiry.WithLabelValues(pkiname).Set(float64(crl.TBSCertList.NextUpdate.Sub(now).Seconds()))
+					crl_nextupdate.WithLabelValues(pkiname).Set(float64(crl.TBSCertList.NextUpdate.Unix()))
+				}
 				for _, cert := range pki.GetCerts() {
-					now := time.Now()
 					certlabels := getLabelValues(pkiname, cert)
 					expiry.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Sub(now).Seconds()))
 					age.WithLabelValues(certlabels...).Set(float64(now.Sub(cert.NotBefore).Seconds()))
@@ -57,7 +74,7 @@ func PromWatchCerts(pkimon *PKIMon) {
 					enddate.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Unix()))
 				}
 			}
-			time.Sleep(time.Second)
+			time.Sleep(time.Minute)
 		}
 	}()
 
