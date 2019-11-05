@@ -5,29 +5,15 @@ import (
 	"crypto/x509/pkix"
 	"fmt"
 	influx "github.com/influxdata/influxdb1-client"
+	"os"
 	"strings"
 	"time"
 )
 
-//var labelNames = []string{
-//	"source",
-//	"serial",
-//	"common_name",
-//	"organization",
-//	"organizational_unit",
-//	"country",
-//	"province",
-//	"locality",
-//}
-//
-//type PromMetrics struct {
-//	expiry    *prometheus.GaugeVec
-//	age       *prometheus.GaugeVec
-//	startdate *prometheus.GaugeVec
-//	enddate   *prometheus.GaugeVec
-//}
+var hostname string
 
 func InfluxWatchCerts(pkimon *PKIMon) {
+	hostname, _ = os.Hostname()
 	go func() {
 		for {
 			for pkiname, pki := range pkimon.GetPKIs() {
@@ -48,6 +34,7 @@ func printCertificateInfluxPoint(pkiname string, cert *x509.Certificate) {
 	point := influx.Point{
 		Measurement: "x509cert",
 		Tags: map[string]string{
+			"host":                hostname,
 			"source":              pkiname,
 			"serial":              strings.ReplaceAll(fmt.Sprintf("% x", cert.SerialNumber.Bytes()), " ", "-"),
 			"common_name":         cert.Subject.CommonName,
@@ -74,6 +61,7 @@ func printCrlInfluxPoint(pkiname string, crl *pkix.CertificateList) {
 	point := influx.Point{
 		Measurement: "x509crl",
 		Tags: map[string]string{
+			"host":   hostname,
 			"source": pkiname,
 		},
 		Fields: map[string]interface{}{
