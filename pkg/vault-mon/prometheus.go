@@ -6,6 +6,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -75,7 +76,10 @@ func getLabelValues(pkiname string, cert *x509.Certificate) []string {
 	}
 }
 
-func PromStartExporter() {
+func PromStartExporter(port int) {
 	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(":9333", nil)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }

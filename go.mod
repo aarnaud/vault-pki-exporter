@@ -8,5 +8,7 @@ require (
 	github.com/mitchellh/mapstructure v1.1.2
 	github.com/prometheus/client_golang v1.2.1
 	github.com/sirupsen/logrus v1.4.2
+	github.com/spf13/cobra v0.0.5
+	github.com/spf13/viper v1.5.0
 	golang.org/x/crypto v0.0.0-20191011191535-87dc89f01550
 )
