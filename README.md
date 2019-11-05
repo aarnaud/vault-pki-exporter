@@ -1,0 +1,73 @@
+# vault-pki-exporter
+
+> Export PKI Certificate and CRL metrics base on dates
+
+## Vault integration
+
+Compatibility with all environment variable use by vault cli
+
+Example:
+
+```
+VAULT_SKIP_VERIFY=true;
+VAULT_ADDR=https://vault.hostname.com;
+VAULT_CLIENT_KEY=mycert.pem;
+VAULT_CLIENT_CERT=mycert.pem;
+VAULT_AUTH_METHOD=oidc
+```
+
+`VAULT_AUTH_METHOD` is not native in vault cli but used in this application
+
+## Usage
+
+```
+Usage:
+   [flags]
+   [command]
+
+Available Commands:
+  help        Help about any command
+  version     Print the version.
+
+Flags:
+      --fetch-interval duration     How many sec between fetch certs on vault (default 1m0s)
+  -h, --help                        help for this command
+      --influx                      Enable InfluxDB Line Protocol
+      --port int                    Prometheus exporter HTTP port (default 9333)
+      --prometheus                  Enable prometheus exporter, default if nothing else
+      --refresh-interval duration   How many sec between metrics update (default 1m0s)
+  -v, --verbose                     Enable verbose
+
+Use " [command] --help" for more information about a command.
+```
+
+
+## InfluxDB Line Protocol
+
+```
+x509_crl,host=your.hostname.com,source=pki-test/ expiry=245124i,nextupdate=1573235993i 1572990868
+x509_cert,common_name=My\ PKI\ CA,country=CA,host=your.hostname.com,locality=Montreal,organization=Example,organizational_unit=WebService,province=QC,serial=0e-50-38-4d-18-69-52-54-1d-71-31-49-1b-a8-06-c7-4f-23-64-26,source=pki-test/ age=14106i,enddate=1573408792i,expiry=417923i,startdate=1572976762i 1572990868
+```
+
+## Prometheus exporter
+
+```
+# HELP x509_crl_expiry 
+# TYPE x509_crl_expiry gauge
+x509_crl_expiry{source="pki-test/"} 243687.999819847
+# HELP x509_crl_nextupdate 
+# TYPE x509_crl_nextupdate gauge
+x509_crl_nextupdate{source="pki-test/"} 1.573235993e+09
+# HELP x509_cert_age 
+# TYPE x509_cert_age gauge
+x509_cert_age{common_name="My PKI CA",country="CA",locality="Montreal",organization="Example",organizational_unit="WebService",province="QC",serial="0e-50-38-4d-18-69-52-54-1d-71-31-49-1b-a8-06-c7-4f-23-64-26",source="pki-test/"} 15543.000180153
+# HELP x509_cert_enddate 
+# TYPE x509_cert_enddate gauge
+x509_cert_enddate{common_name="My PKI CA",country="CA",locality="Montreal",organization="Example",organizational_unit="WebService",province="QC",serial="0e-50-38-4d-18-69-52-54-1d-71-31-49-1b-a8-06-c7-4f-23-64-26",source="pki-test/"} 1.573408792e+09
+# HELP x509_cert_expiry 
+# TYPE x509_cert_expiry gauge
+x509_cert_expiry{common_name="My PKI CA",country="CA",locality="Montreal",organization="Example",organizational_unit="WebService",province="QC",serial="0e-50-38-4d-18-69-52-54-1d-71-31-49-1b-a8-06-c7-4f-23-64-26",source="pki-test/"} 416486.999819847
+# HELP x509_cert_startdate 
+# TYPE x509_cert_startdate gauge
+x509_cert_startdate{common_name="My PKI CA",country="CA",locality="Montreal",organization="Example",organizational_unit="WebService",province="QC",serial="0e-50-38-4d-18-69-52-54-1d-71-31-49-1b-a8-06-c7-4f-23-64-26",source="pki-test/"} 1.572976762e+09
+```
