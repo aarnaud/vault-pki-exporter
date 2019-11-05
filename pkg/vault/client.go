@@ -21,6 +21,15 @@ type KV_version2 struct {
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
+type SecretList struct {
+	Keys []string
+}
+
+type SecretCertificate struct {
+	Certificate     string
+	Revocation_time int64
+}
+
 func (vault *ClientWrapper) Init() {
 	var err error
 
@@ -179,7 +188,7 @@ func (vault *ClientWrapper) authOIDC() {
 	if err != nil {
 		log.Fatalln(err.Error())
 	}
-	if secret == nil {
+	if secret == nil || secret.Auth == nil {
 		log.Fatalln("Failed to auth with OIDC")
 	}
 	vault.Client.SetToken(secret.Auth.ClientToken)
