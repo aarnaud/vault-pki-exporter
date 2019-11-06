@@ -16,8 +16,9 @@ install: true
 
 script:
   - go mod vendor
-  - go build -mod vendor -o build/vault-pki-exporter cmd/main.go
-  - sha256sum build/vault-pki-exporter > build/vault-pki-exporter.sha256sum
+  - export GIT_VERSION=$(git describe --tags --long --always)
+  - GOOS=linux GOARCH=amd64 go build -mod vendor -ldflags "-X main.version=${GIT_VERSION}" -o build/vault-pki-exporter.linux-amd64 cmd/main.go
+  - sha256sum build/vault-pki-exporter.linux-amd64 > build/vault-pki-exporter.linux-amd64.sha256sum
 
 deploy:
   provider: releases
