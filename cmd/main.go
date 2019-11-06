@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	log "github.com/aarnaud/vault-pki-mon/pkg/logger"
-	"github.com/aarnaud/vault-pki-mon/pkg/vault"
-	vaultMon "github.com/aarnaud/vault-pki-mon/pkg/vault-mon"
+	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
+	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
+	vaultMon "github.com/aarnaud/vault-pki-exporter/pkg/vault-mon"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"time"

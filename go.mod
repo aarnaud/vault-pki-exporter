@@ -1,4 +1,4 @@
-module github.com/aarnaud/vault-pki-mon
+module github.com/aarnaud/vault-pki-exporter
 
 go 1.13
 

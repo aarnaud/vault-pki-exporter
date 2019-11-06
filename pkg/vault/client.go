@@ -2,7 +2,7 @@ package vault
 
 import (
 	"fmt"
-	log "github.com/aarnaud/vault-pki-mon/pkg/logger"
+	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	jwtauth "github.com/hashicorp/vault-plugin-auth-jwt"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
