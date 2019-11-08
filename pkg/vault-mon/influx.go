@@ -63,8 +63,6 @@ func printCertificateInfluxPoint(pkiname string, cert *x509.Certificate) {
 			"startdate": int(cert.NotBefore.Unix()),
 			"enddate":   int(cert.NotAfter.Unix()),
 		},
-		Time:      time.Now(),
-		Precision: "s",
 	}
 	fmt.Println(point.MarshalString())
 }
@@ -81,8 +79,6 @@ func printCrlInfluxPoint(pkiname string, crl *pkix.CertificateList) {
 			"expiry":     int(crl.TBSCertList.NextUpdate.Sub(now).Seconds()),
 			"nextupdate": int(crl.TBSCertList.NextUpdate.Unix()),
 		},
-		Time:      time.Now(),
-		Precision: "s",
 	}
 	fmt.Println(point.MarshalString())
 }
