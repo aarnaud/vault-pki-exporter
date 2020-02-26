@@ -13,7 +13,10 @@ import (
 var hostname string
 
 func InfluxWatchCerts(pkimon *PKIMon, interval time.Duration, loop bool) {
-	hostname, _ = os.Hostname()
+	hostname = os.Getenv("HOSTNAME")
+	if hostname == "" {
+		hostname, _ = os.Hostname()
+	}
 	if loop {
 		go func() {
 			for {
