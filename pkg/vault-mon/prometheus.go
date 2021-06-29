@@ -53,9 +53,11 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	}, []string{"source"})
 	crl_byte_size := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_byte_size",
+		Help: "Size of raw certificate revocation list pem stored in vault",
 	}, []string{"source"})
 	crl_length := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_length",
+		Help: "Length of certificate revocation list",
 	}, []string{"source"})
 	go func() {
 		for {
