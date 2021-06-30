@@ -102,15 +102,11 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 	err = mapstructure.Decode(secret.Data, &secretCert)
 	block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
 	pki.crlRawSize = len([]byte(secretCert.Certificate))
-	// log.Infof("%q crl raw size %d", pki.path, pki.crlRawSize)
-
 	crl, err := x509.ParseCRL(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load CRL for %s, error: %w", pki.path, err.Error())
 	}
 	pki.crl = crl
-	// log.Infof("%q crl size %d", pki.path, len(crl.TBSCertList.RevokedCertificates))
-	// log.Infof("%q crl raw size in tbscertlist %d", pki.path, len(crl.TBSCertList.Raw))
 
 	return pki.crl, nil
 }
