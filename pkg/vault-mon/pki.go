@@ -5,21 +5,23 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"sync"
+	"time"
+
 	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
-	"sync"
-	"time"
 )
 
 type PKI struct {
-	path     string
-	certs    map[string]*x509.Certificate
-	crl      *pkix.CertificateList
-	vault    *vaultapi.Client
-	certsmux sync.Mutex
-	crlmux   sync.Mutex
+	path       string
+	certs      map[string]*x509.Certificate
+	crl        *pkix.CertificateList
+	crlRawSize int
+	vault      *vaultapi.Client
+	certsmux   sync.Mutex
+	crlmux     sync.Mutex
 }
 
 type PKIMon struct {
@@ -99,11 +101,13 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 	secretCert := vault.SecretCertificate{}
 	err = mapstructure.Decode(secret.Data, &secretCert)
 	block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
+	pki.crlRawSize = len([]byte(secretCert.Certificate))
 	crl, err := x509.ParseCRL(block.Bytes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load CRL for %s, error: %w", pki.path, err.Error())
 	}
 	pki.crl = crl
+
 	return pki.crl, nil
 }
 

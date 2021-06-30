@@ -3,13 +3,14 @@ package vault_mon
 import (
 	"crypto/x509"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var labelNames = []string{
@@ -50,7 +51,14 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	crl_nextupdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_nextupdate",
 	}, []string{"source"})
-
+	crl_byte_size := promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "x509_crl_byte_size",
+		Help: "Size of raw certificate revocation list pem stored in vault",
+	}, []string{"source"})
+	crl_length := promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "x509_crl_length",
+		Help: "Length of certificate revocation list",
+	}, []string{"source"})
 	go func() {
 		for {
 			pkis := pkimon.GetPKIs()
@@ -65,6 +73,8 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 				if crl := pki.GetCRL(); crl != nil {
 					crl_expiry.WithLabelValues(pkiname).Set(float64(crl.TBSCertList.NextUpdate.Sub(now).Seconds()))
 					crl_nextupdate.WithLabelValues(pkiname).Set(float64(crl.TBSCertList.NextUpdate.Unix()))
+					crl_length.WithLabelValues(pkiname).Set(float64(len(crl.TBSCertList.RevokedCertificates)))
+					crl_byte_size.WithLabelValues(pkiname).Set(float64(pki.crlRawSize))
 				}
 				for _, cert := range pki.GetCerts() {
 					certlabels := getLabelValues(pkiname, cert)
