@@ -15,13 +15,14 @@ import (
 )
 
 type PKI struct {
-	path       string
-	certs      map[string]*x509.Certificate
-	crl        *pkix.CertificateList
-	crlRawSize int
-	vault      *vaultapi.Client
-	certsmux   sync.Mutex
-	crlmux     sync.Mutex
+	path                string
+	certs               map[string]*x509.Certificate
+	crl                 *pkix.CertificateList
+	crlRawSize          int
+	expiredCertsCounter int
+	vault               *vaultapi.Client
+	certsmux            sync.Mutex
+	crlmux              sync.Mutex
 }
 
 type PKIMon struct {
@@ -151,8 +152,13 @@ func (pki *PKI) loadCerts() error {
 			pki.certs[cert.Subject.CommonName] = cert
 		}
 
+		if cert.NotAfter.Unix() > time.Now().Unix() {
+			pki.expiredCertsCounter++
+		}
+
 		// if not in map add it if it's not expired
 		if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
+
 			revoked, err := pki.certIsRevokedCRL(cert)
 			if err != nil {
 				log.Errorln(err)
