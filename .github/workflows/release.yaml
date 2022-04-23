@@ -10,6 +10,7 @@ jobs:
         uses: ngs/go-release.action@v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GO111MODULE: on
           GOARCH: amd64
           GOOS: linux
   release-linux-arm:
@@ -21,6 +22,7 @@ jobs:
         uses: ngs/go-release.action@v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GO111MODULE: on
           GOARCH: "arm"
           GOOS: linux
   release-linux-arm64:
@@ -32,5 +34,6 @@ jobs:
         uses: ngs/go-release.action@v1.0.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GO111MODULE: on
           GOARCH: arm64
           GOOS: linux
