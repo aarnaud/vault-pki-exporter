@@ -9,6 +9,7 @@ jobs:
       - name: compile and release
         uses: ngs/go-release.action@v1.0.1
         env:
+          CMD_PATH: "-o vault-pki-exporter cmd/main.go"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GO111MODULE: on
           GOARCH: amd64
@@ -21,6 +22,7 @@ jobs:
       - name: compile and release
         uses: ngs/go-release.action@v1.0.1
         env:
+          CMD_PATH: "-o vault-pki-exporter cmd/main.go"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GO111MODULE: on
           GOARCH: "arm"
@@ -33,6 +35,7 @@ jobs:
       - name: compile and release
         uses: ngs/go-release.action@v1.0.1
         env:
+          CMD_PATH: "-o vault-pki-exporter cmd/main.go"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GO111MODULE: on
           GOARCH: arm64
