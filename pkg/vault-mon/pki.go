@@ -152,7 +152,7 @@ func (pki *PKI) loadCerts() error {
 			pki.certs[cert.Subject.CommonName] = cert
 		}
 
-		if cert.NotAfter.Unix() > time.Now().Unix() {
+		if cert.NotAfter.Unix() < time.Now().Unix() {
 			pki.expiredCertsCounter++
 		}
 
