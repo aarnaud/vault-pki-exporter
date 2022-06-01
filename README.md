@@ -16,7 +16,9 @@ VAULT_CLIENT_CERT=mycert.pem;
 VAULT_AUTH_METHOD=oidc
 ```
 
-`VAULT_AUTH_METHOD` is not native in vault cli but used in this application
+`VAULT_AUTH_METHOD` is not native in vault cli but used in this application. Valid values: oidc,k8s.
+* When set to oidc, will authenticate using oidc method, you can customize auth mount point by setting VAULT_AUTH_MOUNT.
+* When set to k8s, will authenticate using kubernetes auth method. You should also set VAULT_K8S_ROLE to vault k8s role name and optionally specify VAULT_AUTH_MOUNT for custom auth mount name. 
 
 ## Usage
 
