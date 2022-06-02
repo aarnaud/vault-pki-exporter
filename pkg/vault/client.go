@@ -1,10 +1,12 @@
 package vault
 
 import (
+	"context"
 	"fmt"
 	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	jwtauth "github.com/hashicorp/vault-plugin-auth-jwt"
 	vaultapi "github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/api/auth/kubernetes"
 	"github.com/mitchellh/mapstructure"
 	"os"
 	"time"
@@ -45,8 +47,11 @@ func (vault *ClientWrapper) Init() {
 	}
 
 	if vault.Client.Token() == "" {
-		if os.Getenv("VAULT_AUTH_METHOD") == "oidc" {
+		switch os.Getenv("VAULT_AUTH_METHOD") {
+		case "oidc":
 			vault.authOIDC()
+		case "k8s":
+			vault.authK8S()
 		}
 	}
 
@@ -192,4 +197,19 @@ func (vault *ClientWrapper) authOIDC() {
 		log.Fatalln("Failed to auth with OIDC")
 	}
 	vault.Client.SetToken(secret.Auth.ClientToken)
+}
+
+func (vault *ClientWrapper) authK8S() {
+	mount := os.Getenv("VAULT_AUTH_MOUNT")
+	if mount == "" {
+		mount = "kubernetes"
+	}
+
+	am, err := kubernetes.NewKubernetesAuth(os.Getenv("VAULT_K8S_ROLE"), kubernetes.WithMountPath(mount))
+	if err != nil {
+		log.Fatalln("Failed to create k8s auth method: ", err)
+	}
+	if _, err := vault.Client.Auth().Login(context.Background(), am); err != nil {
+		log.Fatalln("Failed to auth with k8s: ", err)
+	}
 }
