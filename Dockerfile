@@ -10,4 +10,4 @@ FROM alpine
 COPY --from=builderimage /go/src/vault-pki-exporter/vault-pki-exporter /app/
 WORKDIR /app
 EXPOSE 9333
-CMD ./vault-pki-exporter
+CMD ["./vault-pki-exporter"]
