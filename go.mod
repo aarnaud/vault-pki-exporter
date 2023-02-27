@@ -1,6 +1,6 @@
 module github.com/aarnaud/vault-pki-exporter
 
-go 1.17
+go 1.19
 
 require (
 	github.com/hashicorp/vault-plugin-auth-jwt v0.12.1
