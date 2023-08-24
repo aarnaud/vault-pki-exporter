@@ -148,6 +148,8 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 		return err
 	}
 
+	// reset expired certs to avoid counter creep
+	pki.expiredCertsCounter = 0
 	for _, serial := range serialsList.Keys {
 		secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
 		if err != nil {
