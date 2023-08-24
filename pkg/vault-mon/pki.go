@@ -158,6 +158,9 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 		batchSize = 1 // Ensure a minimum batch size of 1.
 	}
 
+	// Define a mutex for protecting concurrent access to the certs map
+	var certsMux sync.Mutex
+
 	// Loop through serialsList.Keys in batches.
 	for i := 0; i < len(serialsList.Keys); i += batchSize {
 		end := i + batchSize
@@ -188,6 +191,7 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 					log.Errorf("failed to load certificate for %s/%s, error: %w", pki.path, serial, err.Error())
 				}
 
+				certsMux.Lock()
 				// if already in map check the expiration
 				if certInMap, ok := pki.certs[cert.Subject.CommonName]; ok && certInMap.NotAfter.Unix() < cert.NotAfter.Unix() {
 					pki.certs[cert.Subject.CommonName] = cert
@@ -199,7 +203,6 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 
 				// if not in map add it if it's not expired
 				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
-
 					revoked, err := pki.certIsRevokedCRL(cert)
 					if err != nil {
 						log.Errorln(err)
@@ -207,8 +210,8 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 					if !revoked {
 						pki.certs[cert.Subject.CommonName] = cert
 					}
-
 				}
+				certsMux.Unlock()
 			}(serial)
 		}
 		wg.Wait() // Wait for the batch to complete.
