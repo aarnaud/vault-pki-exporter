@@ -111,6 +111,9 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 	}
 	secretCert := vault.SecretCertificate{}
 	err = mapstructure.Decode(secret.Data, &secretCert)
+	if err != nil {
+		return nil, err
+	}
 	block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
 	pki.crlRawSize = len([]byte(secretCert.Certificate))
 	crl, err := x509.ParseCRL(block.Bytes)
