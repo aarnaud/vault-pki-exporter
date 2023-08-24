@@ -12,6 +12,9 @@ import (
 	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/spf13/viper"
 )
 
 type PKI struct {
@@ -65,6 +68,12 @@ func (mon *PKIMon) loadPKI() error {
 
 func (mon *PKIMon) Watch(interval time.Duration) {
 	log.Infoln("Start watching pki certs")
+	var loadCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "x509_load_certs_duration_seconds",
+		Help:    "Duration of loadCerts execution",
+		Buckets: prometheus.ExponentialBuckets(1, 3, 10),
+	})
+
 	go func() {
 		for {
 			log.Infoln("Refresh PKI list")
@@ -75,7 +84,8 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 			for _, pki := range mon.pkis {
 				log.Infof("Refresh PKI certificate for %s", pki.path)
 				pki.clearCerts()
-				err := pki.loadCerts()
+
+				err := pki.loadCerts(loadCertsDuration)
 				if err != nil {
 					log.Errorln(err)
 				}
@@ -112,7 +122,8 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 	return pki.crl, nil
 }
 
-func (pki *PKI) loadCerts() error {
+func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
+	startTime := time.Now()
 	pki.certsmux.Lock()
 	defer pki.certsmux.Unlock()
 
@@ -175,6 +186,7 @@ func (pki *PKI) loadCerts() error {
 		}
 	}
 
+	loadCertsDuration.Observe(time.Since(startTime).Seconds())
 	return nil
 }
 

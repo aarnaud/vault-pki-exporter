@@ -64,8 +64,14 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 		Name: "x509_crl_length",
 		Help: "Length of certificate revocation list",
 	}, []string{"source"})
+	var promWatchCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "x509_watch_certs_duration_seconds",
+		Help:    "Duration of promWatchCerts execution",
+		Buckets: prometheus.ExponentialBuckets(0.0001, 4, 10),
+	})
 	go func() {
 		for {
+			startTime := time.Now()
 			pkis := pkimon.GetPKIs()
 			expiry.Reset()
 			age.Reset()
@@ -92,6 +98,7 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 				certcount.WithLabelValues(pkiname).Set(float64(len(pki.certs)))
 				expired_cert_count.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
 			}
+			promWatchCertsDuration.Observe(time.Since(startTime).Seconds())
 			time.Sleep(interval)
 		}
 	}()
