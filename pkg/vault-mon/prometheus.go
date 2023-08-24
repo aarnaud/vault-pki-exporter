@@ -73,12 +73,6 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 		for {
 			startTime := time.Now()
 			pkis := pkimon.GetPKIs()
-			expiry.Reset()
-			age.Reset()
-			startdate.Reset()
-			enddate.Reset()
-			crl_expiry.Reset()
-			crl_nextupdate.Reset()
 			now := time.Now()
 			for pkiname, pki := range pkis {
 				if crl := pki.GetCRL(); crl != nil {
