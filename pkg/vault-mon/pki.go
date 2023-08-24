@@ -154,9 +154,11 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 	// reset expired certs to avoid counter creep
 	pki.expiredCertsCounter = 0
 
-	// Determine batch size based on the length of serialsList.Keys.
-	// todo make batch size CLI configurable
-	batchSize := len(serialsList.Keys) / 20 // 5% of the total certificates in each batch
+	// determine batch size dynamically based on the length of serialsList.Keys
+	batchSizePercentage := viper.GetFloat64("batch_size_percent")
+
+	// Calculate the batch size using floating-point division, then round to the nearest integer
+	batchSize := int(float64(len(serialsList.Keys)) * (batchSizePercentage / 100.0))
 	if batchSize < 1 {
 		batchSize = 1
 	}
