@@ -14,6 +14,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/spf13/viper"
 )
 
 type PKI struct {
@@ -149,42 +150,68 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 
 	// reset expired certs to avoid counter creep
 	pki.expiredCertsCounter = 0
-	for _, serial := range serialsList.Keys {
-		secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
-		if err != nil {
-			log.Errorf("failed to get certificate for %s%s, got error: %w", pki.path, serial, err.Error())
-			continue
-		}
-		secretCert := vault.SecretCertificate{}
-		err = mapstructure.Decode(secret.Data, &secretCert)
-		block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			log.Errorf("failed to load certificate for %s/%s, error: %w", pki.path, serial, err.Error())
-			continue
-		}
 
-		// if already in map check the expiration
-		if certInMap, ok := pki.certs[cert.Subject.CommonName]; ok && certInMap.NotAfter.Unix() < cert.NotAfter.Unix() {
-			pki.certs[cert.Subject.CommonName] = cert
+	// Determine batch size based on the length of serialsList.Keys.
+	// todo make batch size CLI configurable
+	batchSize := len(serialsList.Keys) / 20 // 5% of the total certificates in each batch
+	if batchSize < 1 {
+		batchSize = 1 // Ensure a minimum batch size of 1.
+	}
+
+	// Loop through serialsList.Keys in batches.
+	for i := 0; i < len(serialsList.Keys); i += batchSize {
+		end := i + batchSize
+		if end > len(serialsList.Keys) {
+			end = len(serialsList.Keys)
 		}
+		batchKeys := serialsList.Keys[i:end]
 
-		if cert.NotAfter.Unix() < time.Now().Unix() {
-			pki.expiredCertsCounter++
+		// Process certificates in the current batch concurrently.
+		var wg sync.WaitGroup
+		if viper.GetBool("verbose") {
+			log.WithField("batchsize", len(batchKeys)).Infof("processing batch of certs in loadCerts")
 		}
+		for _, serial := range batchKeys {
+			wg.Add(1)
+			go func(serial string) {
+				defer wg.Done()
 
-		// if not in map add it if it's not expired
-		if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
+				secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
+				if err != nil {
+					log.Errorf("failed to get certificate for %s%s, got error: %w", pki.path, serial, err.Error())
+				}
+				secretCert := vault.SecretCertificate{}
+				err = mapstructure.Decode(secret.Data, &secretCert)
+				block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
+				cert, err := x509.ParseCertificate(block.Bytes)
+				if err != nil {
+					log.Errorf("failed to load certificate for %s/%s, error: %w", pki.path, serial, err.Error())
+				}
 
-			revoked, err := pki.certIsRevokedCRL(cert)
-			if err != nil {
-				log.Errorln(err)
-			}
-			if !revoked {
-				pki.certs[cert.Subject.CommonName] = cert
-			}
+				// if already in map check the expiration
+				if certInMap, ok := pki.certs[cert.Subject.CommonName]; ok && certInMap.NotAfter.Unix() < cert.NotAfter.Unix() {
+					pki.certs[cert.Subject.CommonName] = cert
+				}
 
+				if cert.NotAfter.Unix() < time.Now().Unix() {
+					pki.expiredCertsCounter++
+				}
+
+				// if not in map add it if it's not expired
+				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
+
+					revoked, err := pki.certIsRevokedCRL(cert)
+					if err != nil {
+						log.Errorln(err)
+					}
+					if !revoked {
+						pki.certs[cert.Subject.CommonName] = cert
+					}
+
+				}
+			}(serial)
 		}
+		wg.Wait() // Wait for the batch to complete.
 	}
 
 	loadCertsDuration.Observe(time.Since(startTime).Seconds())
