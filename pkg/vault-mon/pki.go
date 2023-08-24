@@ -118,7 +118,8 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 	pki.crlRawSize = len([]byte(secretCert.Certificate))
 	crl, err := x509.ParseCRL(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load CRL for %s, error: %w", pki.path, err.Error())
+		log.Errorf("failed to load CRL for %s, error: %w", pki.path, err)
+		return nil, err
 	}
 	pki.crl = crl
 
@@ -157,13 +158,13 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 	// determine batch size dynamically based on the length of serialsList.Keys
 	batchSizePercentage := viper.GetFloat64("batch_size_percent")
 
-	// Calculate the batch size using floating-point division, then round to the nearest integer
+	// use float divison and round
 	batchSize := int(float64(len(serialsList.Keys)) * (batchSizePercentage / 100.0))
 	if batchSize < 1 {
 		batchSize = 1
 	}
 
-	// Loop through serialsList.Keys in batches.
+	// loop in batches via waitgroups to make this much faster for large vault installations
 	for i := 0; i < len(serialsList.Keys); i += batchSize {
 		end := i + batchSize
 		if end > len(serialsList.Keys) {
@@ -176,7 +177,7 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 			log.WithField("batchsize", len(batchKeys)).Infof("processing batch of certs in loadCerts")
 		}
 
-		// Define a mutex for protecting concurrent access to the certs map
+		// add a mutex for protecting concurrent access to the certs map
 		var certsMux sync.Mutex
 		for _, serial := range batchKeys {
 			wg.Add(1)
