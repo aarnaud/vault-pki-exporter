@@ -136,7 +136,7 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 	if err != nil {
 		return err
 	}
-	if secret == nil {
+	if secret == nil || secret.Data == nil {
 		// if path has no certs, exit straight away
 		// before hitting a segfault
 		return nil
@@ -155,11 +155,8 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 	// todo make batch size CLI configurable
 	batchSize := len(serialsList.Keys) / 20 // 5% of the total certificates in each batch
 	if batchSize < 1 {
-		batchSize = 1 // Ensure a minimum batch size of 1.
+		batchSize = 1
 	}
-
-	// Define a mutex for protecting concurrent access to the certs map
-	var certsMux sync.Mutex
 
 	// Loop through serialsList.Keys in batches.
 	for i := 0; i < len(serialsList.Keys); i += batchSize {
@@ -169,26 +166,41 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 		}
 		batchKeys := serialsList.Keys[i:end]
 
-		// Process certificates in the current batch concurrently.
 		var wg sync.WaitGroup
 		if viper.GetBool("verbose") {
 			log.WithField("batchsize", len(batchKeys)).Infof("processing batch of certs in loadCerts")
 		}
+
+		// Define a mutex for protecting concurrent access to the certs map
+		var certsMux sync.Mutex
 		for _, serial := range batchKeys {
 			wg.Add(1)
 			go func(serial string) {
 				defer wg.Done()
 
 				secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
-				if err != nil {
-					log.Errorf("failed to get certificate for %s%s, got error: %w", pki.path, serial, err.Error())
+				if err != nil || secret == nil || secret.Data == nil {
+					log.Errorf("failed to get certificate for %s%s, got error: %v", pki.path, serial, err)
+					return
 				}
+
 				secretCert := vault.SecretCertificate{}
 				err = mapstructure.Decode(secret.Data, &secretCert)
+				if err != nil {
+					log.Errorf("failed to decode secret for %s/%s, error: %v", pki.path, serial, err)
+					return
+				}
+
 				block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
+				if block == nil {
+					log.Errorf("failed to decode PEM block for %s/%s", pki.path, serial)
+					return
+				}
+
 				cert, err := x509.ParseCertificate(block.Bytes)
 				if err != nil {
-					log.Errorf("failed to load certificate for %s/%s, error: %w", pki.path, serial, err.Error())
+					log.Errorf("failed to load certificate for %s/%s, error: %v", pki.path, serial, err)
+					return
 				}
 
 				certsMux.Lock()
@@ -214,7 +226,7 @@ func (pki *PKI) loadCerts(loadCertsDuration prometheus.Histogram) error {
 				certsMux.Unlock()
 			}(serial)
 		}
-		wg.Wait() // Wait for the batch to complete.
+		wg.Wait()
 	}
 
 	loadCertsDuration.Observe(time.Since(startTime).Seconds())
