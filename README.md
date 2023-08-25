@@ -42,6 +42,7 @@ Flags:
       --port int                    Prometheus exporter HTTP port (default 9333)
       --prometheus                  Enable prometheus exporter, default if nothing else
       --refresh-interval duration   How many sec between metrics update (default 1m0s)
+      --batch-size-percent          How large of a batch of certificates to get data for at once, supports floats (e.g 0.0 - 100.0) (default 1)
   -v, --verbose                     Enable verbose
 
 Use " [command] --help" for more information about a command.

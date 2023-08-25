@@ -62,7 +62,7 @@ func init() {
 		log.Fatal(err)
 	}
 
-	flags.Float64("batch-size-percent", 1, "loadCerts batch size percentage")
+	flags.Float64("batch-size-percent", 1, "loadCerts batch size percentage, supports floats (e.g 0.0 - 100.0)")
 	if err := viper.BindPFlag("batch_size_percent", flags.Lookup("batch-size-percent")); err != nil {
 		log.Fatal(err)
 	}
