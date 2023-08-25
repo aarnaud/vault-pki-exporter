@@ -64,7 +64,7 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 		Name: "x509_crl_length",
 		Help: "Length of certificate revocation list",
 	}, []string{"source"})
-	var promWatchCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+	promWatchCertsDuration := promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "x509_watch_certs_duration_seconds",
 		Help:    "Duration of promWatchCerts execution",
 		Buckets: prometheus.ExponentialBuckets(0.0001, 4, 10),
