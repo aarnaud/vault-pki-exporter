@@ -12,6 +12,9 @@ import (
 	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/spf13/viper"
 )
 
 type PKI struct {
@@ -31,6 +34,12 @@ type PKIMon struct {
 	mux    sync.Mutex
 	Loaded bool
 }
+
+var loadCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "x509_load_certs_duration_seconds",
+	Help:    "Duration of loadCerts execution",
+	Buckets: prometheus.ExponentialBuckets(1, 3, 10),
+})
 
 func (mon *PKIMon) Init(vault *vaultapi.Client) error {
 	mon.vault = vault
@@ -65,6 +74,7 @@ func (mon *PKIMon) loadPKI() error {
 
 func (mon *PKIMon) Watch(interval time.Duration) {
 	log.Infoln("Start watching pki certs")
+
 	go func() {
 		for {
 			log.Infoln("Refresh PKI list")
@@ -75,6 +85,7 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 			for _, pki := range mon.pkis {
 				log.Infof("Refresh PKI certificate for %s", pki.path)
 				pki.clearCerts()
+
 				err := pki.loadCerts()
 				if err != nil {
 					log.Errorln(err)
@@ -101,11 +112,15 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 	}
 	secretCert := vault.SecretCertificate{}
 	err = mapstructure.Decode(secret.Data, &secretCert)
+	if err != nil {
+		return nil, err
+	}
 	block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
 	pki.crlRawSize = len([]byte(secretCert.Certificate))
 	crl, err := x509.ParseCRL(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load CRL for %s, error: %w", pki.path, err.Error())
+		log.Errorf("failed to load CRL for %s, error: %w", pki.path, err)
+		return nil, err
 	}
 	pki.crl = crl
 
@@ -113,6 +128,8 @@ func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
 }
 
 func (pki *PKI) loadCerts() error {
+
+	startTime := time.Now()
 	pki.certsmux.Lock()
 	defer pki.certsmux.Unlock()
 
@@ -125,7 +142,7 @@ func (pki *PKI) loadCerts() error {
 	if err != nil {
 		return err
 	}
-	if secret == nil {
+	if secret == nil || secret.Data == nil {
 		// if path has no certs, exit straight away
 		// before hitting a segfault
 		return nil
@@ -137,44 +154,90 @@ func (pki *PKI) loadCerts() error {
 		return err
 	}
 
-	for _, serial := range serialsList.Keys {
-		secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
-		if err != nil {
-			log.Errorf("failed to get certificate for %s%s, got error: %w", pki.path, serial, err.Error())
-			continue
-		}
-		secretCert := vault.SecretCertificate{}
-		err = mapstructure.Decode(secret.Data, &secretCert)
-		block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			log.Errorf("failed to load certificate for %s/%s, error: %w", pki.path, serial, err.Error())
-			continue
-		}
+	// reset expired certs to avoid counter creep
+	pki.expiredCertsCounter = 0
 
-		// if already in map check the expiration
-		if certInMap, ok := pki.certs[cert.Subject.CommonName]; ok && certInMap.NotAfter.Unix() < cert.NotAfter.Unix() {
-			pki.certs[cert.Subject.CommonName] = cert
-		}
+	// determine batch size dynamically based on the length of serialsList.Keys
+	batchSizePercentage := viper.GetFloat64("batch_size_percent")
 
-		if cert.NotAfter.Unix() < time.Now().Unix() {
-			pki.expiredCertsCounter++
-		}
-
-		// if not in map add it if it's not expired
-		if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
-
-			revoked, err := pki.certIsRevokedCRL(cert)
-			if err != nil {
-				log.Errorln(err)
-			}
-			if !revoked {
-				pki.certs[cert.Subject.CommonName] = cert
-			}
-
-		}
+	// use float divison and round
+	batchSize := int(float64(len(serialsList.Keys)) * (batchSizePercentage / 100.0))
+	if batchSize < 1 {
+		batchSize = 1
 	}
 
+	// loop in batches via waitgroups to make this much faster for large vault installations
+	for i := 0; i < len(serialsList.Keys); i += batchSize {
+		end := i + batchSize
+		if end > len(serialsList.Keys) {
+			end = len(serialsList.Keys)
+		}
+		batchKeys := serialsList.Keys[i:end]
+
+		var wg sync.WaitGroup
+		if viper.GetBool("verbose") {
+			log.WithField("batchsize", len(batchKeys)).Infof("processing batch of certs in loadCerts")
+		}
+
+		// add a mutex for protecting concurrent access to the certs map
+		var certsMux sync.Mutex
+		for _, serial := range batchKeys {
+			wg.Add(1)
+			go func(serial string) {
+				defer wg.Done()
+
+				secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
+				if err != nil || secret == nil || secret.Data == nil {
+					log.Errorf("failed to get certificate for %s%s, got error: %v", pki.path, serial, err)
+					return
+				}
+
+				secretCert := vault.SecretCertificate{}
+				err = mapstructure.Decode(secret.Data, &secretCert)
+				if err != nil {
+					log.Errorf("failed to decode secret for %s/%s, error: %v", pki.path, serial, err)
+					return
+				}
+
+				block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
+				if block == nil {
+					log.Errorf("failed to decode PEM block for %s/%s", pki.path, serial)
+					return
+				}
+
+				cert, err := x509.ParseCertificate(block.Bytes)
+				if err != nil {
+					log.Errorf("failed to load certificate for %s/%s, error: %v", pki.path, serial, err)
+					return
+				}
+
+				certsMux.Lock()
+				// if already in map check the expiration
+				if certInMap, ok := pki.certs[cert.Subject.CommonName]; ok && certInMap.NotAfter.Unix() < cert.NotAfter.Unix() {
+					pki.certs[cert.Subject.CommonName] = cert
+				}
+
+				if cert.NotAfter.Unix() < time.Now().Unix() {
+					pki.expiredCertsCounter++
+				}
+
+				// if not in map add it if it's not expired
+				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
+					revoked, err := pki.certIsRevokedCRL(cert)
+					if err != nil {
+						log.Errorln(err)
+					}
+					if !revoked {
+						pki.certs[cert.Subject.CommonName] = cert
+					}
+				}
+				certsMux.Unlock()
+			}(serial)
+		}
+		wg.Wait()
+	}
+
+	loadCertsDuration.Observe(time.Since(startTime).Seconds())
 	return nil
 }
 

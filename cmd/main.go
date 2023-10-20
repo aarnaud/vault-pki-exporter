@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"time"
+
 	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
 	vaultMon "github.com/aarnaud/vault-pki-exporter/pkg/vault-mon"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"time"
 )
 
 var version string
@@ -58,6 +59,11 @@ func init() {
 
 	flags.Duration("refresh-interval", time.Minute, "How many sec between metrics update")
 	if err := viper.BindPFlag("refresh_interval", flags.Lookup("refresh-interval")); err != nil {
+		log.Fatal(err)
+	}
+
+	flags.Float64("batch-size-percent", 1, "loadCerts batch size percentage, supports floats (e.g 0.0 - 100.0)")
+	if err := viper.BindPFlag("batch_size_percent", flags.Lookup("batch-size-percent")); err != nil {
 		log.Fatal(err)
 	}
 }
