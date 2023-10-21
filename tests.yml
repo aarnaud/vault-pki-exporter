@@ -34,7 +34,6 @@ testcases:
   - name: configureFirstCA
     steps:
       - name: createPKIMount
-        info: echo "{{.mounts}}"
         type: http
         method: POST
         url: {{.vaultHost}}/v1/sys/mounts/first-ca
