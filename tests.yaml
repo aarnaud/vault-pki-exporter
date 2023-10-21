@@ -1,5 +1,5 @@
 # Using Venom https://github.com/ovh/venom
-# venom run tests.yaml
+# venom run tests.yml
 name: vault-pki-exporter
 vars:
   vaultHost: "http://127.0.0.1:8200"

@@ -1,16 +1,8 @@
 name: Automated tests
 
 on:
-  push:
-    # Publish `master` as Docker `latest` image.
-    branches:
-      - master
-      - develop
-
-    # Publish `v1.2.3` tags as releases.
-    tags:
-      - '*'
-
+  # allow this workflow to be called from other workflows
+  workflow_call:
   # Run tests for any PRs.
   pull_request:
 
@@ -28,4 +20,4 @@ jobs:
         run: curl https://github.com/ovh/venom/releases/download/v1.1.0/venom.linux-amd64 -L -o /usr/local/bin/venom && chmod +x /usr/local/bin/venom
 
       - name: Run test
-        run: venom run tests.yaml
+        run: venom run tests.yml
