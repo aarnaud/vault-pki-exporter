@@ -1,8 +1,10 @@
-on:
-  # Publish `v1.2.3` tags as releases.
-  tags:
-    - '*'
 name: Build and release binary
+
+on:
+  push:
+    # Publish `v1.2.3` tags as releases.
+    tags:
+      - '*'
 jobs:
   tests:
     uses: ./.github/workflows/tests.yml
