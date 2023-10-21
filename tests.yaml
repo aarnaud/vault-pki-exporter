@@ -1,0 +1,273 @@
+# Using Venom https://github.com/ovh/venom
+# venom run tests.yaml
+name: vault-pki-exporter
+vars:
+  vaultHost: "http://127.0.0.1:8200"
+  vaultToken: "thisisatokenvalue"
+  exporterURL: "http://127.0.0.1:9333/metrics"
+testcases:
+  - name: docker compose up
+    steps:
+      - type: exec
+        script: docker compose up -d --wait
+  - name: vaultStatus
+    steps:
+      - name: vaultHealth
+        type: http
+        method: GET
+        url: {{.vaultHost}}/v1/sys/health
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson.initialized ShouldEqual true
+          - result.bodyjson.sealed ShouldEqual false
+      - name: vaultAuth
+        type: http
+        method: GET
+        url: {{.vaultHost}}/v1/auth/token/lookup-self
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson.data.display_name ShouldEqual token
+          - result.bodyjson.data.type ShouldEqual service
+
+  - name: configureFirstCA
+    steps:
+      - name: createPKIMount
+        info: echo "{{.mounts}}"
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/sys/mounts/first-ca
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "type": "pki",
+            "description": "First CA"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 204
+      - name: createDefaultRole
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/roles/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        Content-Type: application/json
+        body: |
+          {
+            "allowed_domains": ["example.com"],
+            "allow_subdomains": true,
+            "allow_wildcard_certificates": true
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: checkPKIMount
+        type: http
+        method: GET
+        url: {{.vaultHost}}/v1/sys/mounts/first-ca
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: generateRootKey
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/root/generate/internal
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        Content-Type: application/json
+        body: |
+          {
+            "common_name": "First CA",
+            "key_type": "rsa",
+            "key_bits": "4096",
+            "country": "CA",
+            "locality": "Montreal",
+            "province": "QC",
+            "organization": "example",
+            "ou": "WebService",
+            "not_after": "2100-01-01T00:00:00Z"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson.data.expiration ShouldEqual 4102444800
+
+  - name: enablePKIEngineSecondCA
+    steps:
+      - name: createPKIMount
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/sys/mounts/second-ca
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "type": "pki",
+            "description": "Second CA"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 204
+      - name: createDefaultRole
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/second-ca/roles/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        Content-Type: application/json
+        body: |
+          {
+            "allowed_domains": ["example.com"],
+            "allow_subdomains": true,
+            "allow_wildcard_certificates": true
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: checkPKIMount
+        type: http
+        method: GET
+        url: {{.vaultHost}}/v1/sys/mounts/second-ca
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: generateRootKey
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/second-ca/root/generate/internal
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+        Content-Type: application/json
+        body: |
+          {
+            "common_name": "Second CA",
+            "key_type": "ec",
+            "key_bits": "521",
+            "country": "CA",
+            "locality": "Montreal",
+            "province": "QC",
+            "organization": "example2",
+            "ou": "VPN",
+            "not_after": "2100-01-01T00:00:01Z"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.bodyjson.data.expiration ShouldEqual 4102444801
+
+
+  - name: generateCertsInsideFirstCA
+    steps:
+      - name: cert1
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "first.first-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: cert2
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "*.first-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: cert3
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "alt.first-ca.example.com",
+            "alt_names": "alt2.first-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+
+
+  - name: generateCertsInsideSecondCA
+    steps:
+      - name: cert1
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/second-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "first.second-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: cert2
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/second-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "*.second-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: cert3
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/second-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "alt.second-ca.example.com",
+            "alt_names": "alt2.second-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+
+
+  - name: testMetrics
+    steps:
+      - name: wait 10s
+        type: exec
+        script: sleep 10
+      - name: validateMetrics
+        type: http
+        method: GET
+        url: {{.exporterURL}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+          # First CA Root
+          - result.body ShouldContainSubstring common_name="First CA",country="CA",locality="Montreal",organization="example",organizational_unit="WebService",province="QC"
+          - result.body ShouldContainSubstring common_name="first.first-ca.example.com"
+          - result.body ShouldContainSubstring common_name="*.first-ca.example.com"
+          - result.body ShouldContainSubstring common_name="alt.first-ca.example.com"
+          # Second CA Root
+          - result.body ShouldContainSubstring common_name="Second CA",country="CA",locality="Montreal",organization="example2",organizational_unit="VPN",province="QC"
+          - result.body ShouldContainSubstring common_name="first.second-ca.example.com"
+          - result.body ShouldContainSubstring common_name="*.second-ca.example.com"
+          - result.body ShouldContainSubstring common_name="alt.second-ca.example.com"
+
+  - name: docker compose down
+    steps:
+      - type: exec
+        script: docker compose down -v

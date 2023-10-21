@@ -1,0 +1,35 @@
+version: "3"
+networks:
+  vault-pki-exporter:
+services:
+  vault:
+    image: vault:1.13.3
+    networks:
+      - vault-pki-exporter
+    ports:
+      - 8200:8200
+    environment:
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_DEV_ROOT_TOKEN_ID=thisisatokenvalue
+    healthcheck:
+      test: vault status
+      interval: 2s
+      retries: 5
+      timeout: 5s
+  vault-pki-exporter:
+    build:
+      dockerfile: Dockerfile
+    command:
+      - ./vault-pki-exporter
+      - --fetch-interval=5s
+      - --refresh-interval=5s
+    networks:
+      - vault-pki-exporter
+    ports:
+      - 9333:9333
+    environment:
+      - VAULT_ADDR=http://vault:8200
+      - VAULT_TOKEN=thisisatokenvalue
+    depends_on:
+      vault:
+        condition: service_healthy
