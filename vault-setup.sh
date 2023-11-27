@@ -1,6 +1,5 @@
 #!/bin/sh
 
-mkdir /vault/data
 # Start the Vault server in the background
 # vault server -config=/vault/config/config.hcl &
 vault server -dev -dev-listen-address="0.0.0.0:8200" &
@@ -10,43 +9,36 @@ while ! vault status > /dev/null 2>&1; do
     sleep 1
 done
 
-# Initialize and unseal Vault (if needed)
-# vault operator init ...
-# vault operator unseal ...
-
 # https://developer.hashicorp.com/vault/docs/secrets/pki/setup
-# Enable the PKI secrets engine
 vault secrets enable pki
 
-# Set the maximum lease TTL for the PKI secrets engine
 vault secrets tune -max-lease-ttl=87600h pki
-
-# Generate a root certificate (or use an existing one)
-# vault write -field=certificate pki/root/generate/internal \
-#     common_name="example.com" \
-#     ttl=87600h > CA_cert.crt
 
  vault write pki/root/generate/internal \
     common_name=my-website.com \
     ttl=8760h
 
 vault write pki/config/urls \
-    issuing_certificates="http://127.0.0.1:8200/v1/pki/ca" \
-    crl_distribution_points="http://127.0.0.1:8200/v1/pki/crl"
+    issuing_certificates="http://vault:8200/v1/pki/ca" \
+    crl_distribution_points="http://vault:8200/v1/pki/crl"
+
+
+vault write pki/config/crl expiry="400h"
 
 vault write pki/roles/example-dot-com \
     allowed_domains=my-website.com \
     allow_subdomains=true \
     max_ttl=72h
 
+apk add jq
+# test revoking a certificate for CRL metrics
+CERT_OUTPUT=$(vault write -format=json pki/issue/example-dot-com common_name=www.revokme.my-website.com)
+CERT_SERIAL=$(echo $CERT_OUTPUT | jq -r '.data.serial_number')
+vault write pki/revoke serial_number="$CERT_SERIAL"
+
 vault write pki/issue/example-dot-com \
     common_name=www.my-website.com
 
-# Issue a certificate
-# vault write pki/issue/example-dot-com \
-#     common_name="www.example.com" \
-#     ttl="24h" > example_cert.crt
-
-# Your additional setup here...
+vault read pki/crl/rotate
 
 tail -f /dev/null
