@@ -1,5 +1,9 @@
 #!/bin/sh
 
+## NOTE
+## tests should be run with venom (tests.yml)
+## but this file is still useful for local development
+
 # Start the Vault server in the background
 # vault server -config=/vault/config/config.hcl &
 vault server -dev -dev-listen-address="0.0.0.0:8200" &
