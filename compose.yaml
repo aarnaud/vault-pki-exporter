@@ -3,7 +3,7 @@ networks:
   vault-pki-exporter:
 services:
   vault:
-    image: vault:1.13.3
+    image: hashicorp/vault:1.14.1
     networks:
       - vault-pki-exporter
     ports:
@@ -38,3 +38,4 @@ services:
     depends_on:
       vault:
         condition: service_healthy
+    restart: always
