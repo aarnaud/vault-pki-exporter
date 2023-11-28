@@ -90,6 +90,11 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 				if err != nil {
 					log.Errorln(err)
 				}
+
+				err = pki.loadCrl()
+				if err != nil {
+					log.Errorln(err)
+				}
 			}
 			mon.Loaded = true
 			time.Sleep(interval)
@@ -219,11 +224,6 @@ func (pki *PKI) loadCerts() error {
 
 				if cert.NotAfter.Unix() < time.Now().Unix() {
 					pki.expiredCertsCounter++
-				}
-
-				err = pki.loadCrl()
-				if err != nil {
-					log.Errorln(err)
 				}
 
 				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
