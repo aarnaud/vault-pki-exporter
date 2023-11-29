@@ -9,7 +9,7 @@ testcases:
   - name: docker compose up
     steps:
       - type: exec
-        script: docker compose up -d --wait
+        script: docker compose up --build -d --wait
   - name: vaultStatus
     steps:
       - name: vaultHealth
@@ -243,6 +243,63 @@ testcases:
         assertions:
           - result.statuscode ShouldEqual 200
 
+  - name: generateCertAndRevoke
+    steps:
+      - name: certrevokeme
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "revokeme.first-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+        vars:
+          serialNumber:
+            from: result.bodyjson.data.serial_number
+            regex: ".*" # not sure it's worth a proper regex
+            default: "0"
+      - name: configureCertificateURLs
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/config/urls
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "issuing_certificates": "{{.vaultHost}}/v1/first-ca/ca",
+            "crl_distribution_points": "{{.vaultHost}}/v1/first-ca/crl"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: revokeCert
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/revoke
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "serial_number": "{{.serialNumber}}"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: RotateCRL
+        type: http
+        method: GET
+        url: {{.vaultHost}}/v1/first-ca/crl/rotate
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        assertions:
+          - result.statuscode ShouldEqual 200
+
 
   - name: testMetrics
     steps:
@@ -265,6 +322,8 @@ testcases:
           - result.body ShouldContainSubstring common_name="first.second-ca.example.com"
           - result.body ShouldContainSubstring common_name="*.second-ca.example.com"
           - result.body ShouldContainSubstring common_name="alt.second-ca.example.com"
+          - result.body ShouldNotContainSubstring common_name="revokeme.first-ca.example.com"
+          - result.body ShouldContainSubstring x509_crl_length{source="first-ca/"} 1
 
   - name: docker compose down
     steps:

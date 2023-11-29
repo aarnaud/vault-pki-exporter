@@ -1,2 +1,6 @@
 vendor/
 build/
+vault-pki-exporter
+
+# venom logs
+venom*log

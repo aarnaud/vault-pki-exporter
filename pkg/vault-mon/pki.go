@@ -90,6 +90,11 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 				if err != nil {
 					log.Errorln(err)
 				}
+
+				err = pki.loadCrl()
+				if err != nil {
+					log.Errorln(err)
+				}
 			}
 			mon.Loaded = true
 			time.Sleep(interval)
@@ -103,28 +108,28 @@ func (mon *PKIMon) GetPKIs() map[string]*PKI {
 	return mon.pkis
 }
 
-func (pki *PKI) loadCrl() (*pkix.CertificateList, error) {
+func (pki *PKI) loadCrl() error {
 	pki.crlmux.Lock()
 	defer pki.crlmux.Unlock()
 	secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/crl", pki.path))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	secretCert := vault.SecretCertificate{}
 	err = mapstructure.Decode(secret.Data, &secretCert)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
 	pki.crlRawSize = len([]byte(secretCert.Certificate))
 	crl, err := x509.ParseCRL(block.Bytes)
 	if err != nil {
 		log.Errorf("failed to load CRL for %s, error: %w", pki.path, err)
-		return nil, err
+		return err
 	}
 	pki.crl = crl
 
-	return pki.crl, nil
+	return nil
 }
 
 func (pki *PKI) loadCerts() error {
@@ -221,14 +226,10 @@ func (pki *PKI) loadCerts() error {
 					pki.expiredCertsCounter++
 				}
 
-				// if not in map add it if it's not expired
 				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
-					revoked, err := pki.certIsRevokedCRL(cert)
+					pki.certs[cert.Subject.CommonName] = cert
 					if err != nil {
 						log.Errorln(err)
-					}
-					if !revoked {
-						pki.certs[cert.Subject.CommonName] = cert
 					}
 				}
 				certsMux.Unlock()
@@ -239,20 +240,6 @@ func (pki *PKI) loadCerts() error {
 
 	loadCertsDuration.Observe(time.Since(startTime).Seconds())
 	return nil
-}
-
-func (pki *PKI) certIsRevokedCRL(cert *x509.Certificate) (bool, error) {
-	crl, err := pki.loadCrl()
-	if err != nil {
-		return false, err
-	}
-
-	for _, revoked := range crl.TBSCertList.RevokedCertificates {
-		if cert.SerialNumber.Cmp(revoked.SerialNumber) == 0 {
-			return true, nil
-		}
-	}
-	return false, nil
 }
 
 func (pki *PKI) clearCerts() {
