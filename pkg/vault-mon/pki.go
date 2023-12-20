@@ -115,6 +115,12 @@ func (pki *PKI) loadCrl() error {
 	if err != nil {
 		return err
 	}
+
+	// avoids a segfault
+	if secret == nil || secret.Data == nil {
+		return nil
+	}
+
 	secretCert := vault.SecretCertificate{}
 	err = mapstructure.Decode(secret.Data, &secretCert)
 	if err != nil {
