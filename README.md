@@ -60,10 +60,10 @@ x509_cert,common_name=My\ PKI\ CA,country=CA,host=your.hostname.com,locality=Mon
 ```console
 # HELP x509_crl_expiry
 # TYPE x509_crl_expiry gauge
-x509_crl_expiry{source="pki-test/", issuer="CN=example.com"} 243687.999819847
+x509_crl_expiry{source="pki-test/", issuer="example.com"} 243687.999819847
 # HELP x509_crl_nextupdate
 # TYPE x509_crl_nextupdate gauge
-x509_crl_nextupdate{source="pki-test/", issuer="CN=example.com"} 1.573235993e+09
+x509_crl_nextupdate{source="pki-test/", issuer="example.com"} 1.573235993e+09
 # HELP x509_cert_age
 # TYPE x509_cert_age gauge
 x509_cert_age{common_name="My PKI CA",country="CA",locality="Montreal",organization="Example",organizational_unit="WebService",province="QC",serial="0e-50-38-4d-18-69-52-54-1d-71-31-49-1b-a8-06-c7-4f-23-64-26",source="pki-test/"} 15543.000180153
