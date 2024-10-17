@@ -179,15 +179,11 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 		return nil, fmt.Errorf("no secret found for issuer %s", issuerRef)
 	}
 
-	log.Infof("Issuer: %s, Secret Data: %v", issuerRef, secret.Data)
-
 	crlData, ok := secret.Data["crl"].(string)
 	if !ok || crlData == "" {
 		log.Errorf("CRL data missing or invalid for issuer %s", issuerRef)
 		return nil, fmt.Errorf("crl data missing or invalid for issuer %s", issuerRef)
 	}
-
-	log.Infof("Issuer: %s, Raw CRL Data: %s", issuerRef, crlData)
 
 	block, _ := pem.Decode([]byte(crlData))
 	if block == nil {
@@ -203,7 +199,7 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 		return nil, fmt.Errorf("error parsing CRL for issuer %s: %w", issuerRef, err)
 	}
 
-	log.Infof("Successfully loaded CRL for issuer %s", issuerRef)
+	log.Debugf("Successfully loaded CRL for issuer %s", issuerRef)
 
 	return crl, nil
 }
