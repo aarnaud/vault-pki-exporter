@@ -75,7 +75,6 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 			for pkiname, pki := range pkis {
 				for _, crl := range pki.GetCRLs() {
 					if crl != nil {
-						// issuer string is vanity, such as CN=my-website.com
 						issuer := crl.Issuer.CommonName
 
 						crl_expiry.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Sub(now).Seconds()))
