@@ -124,8 +124,10 @@ func (pki *PKI) loadCrl() error {
 
 	for _, issuerRef := range issuers {
 		crl, err := pki.loadCrlForIssuer(issuerRef)
-		if err != nil || crl == nil {
+		if err != nil {
 			log.Errorf("loadCrl() failed to load CRL for issuer %s, error: %v", issuerRef, err)
+		} else if crl == nil {
+			log.Errorf("CRL cannot be loaded for issuer %s", issuerRef)
 		} else {
 			pki.crls[issuerRef] = crl
 		}
@@ -135,10 +137,8 @@ func (pki *PKI) loadCrl() error {
 }
 
 func (pki *PKI) listIssuers() ([]string, error) {
-	// Define the path where the issuers are listed in your Vault setup
-	// This path might be different based on your Vault configuration
 
-	// Make a read request to Vault
+	// Request PKI engine Vault issuers
 	secret, err := pki.vault.Logical().List(fmt.Sprintf("%s/issuers", pki.path))
 	if err != nil {
 		return nil, fmt.Errorf("error listing issuers: %w", err)
@@ -148,14 +148,12 @@ func (pki *PKI) listIssuers() ([]string, error) {
 		return []string{}, nil
 	}
 
-	// Extract the list of issuers from the response
-	// The key under which issuers Ware listed might vary, so adjust "keys" accordingly
+	// The key under which issuers are listed might vary, so adjust "keys" accordingly
 	issuerRefs, ok := secret.Data["keys"].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("failed to parse issuer list")
 	}
 
-	// Convert issuer references to a slice of strings
 	issuers := make([]string, len(issuerRefs))
 	for i, ref := range issuerRefs {
 		issuer, ok := ref.(string)
@@ -175,19 +173,16 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 	}
 
 	if secret == nil {
-		log.Errorf("No secret found for issuer %s", issuerRef)
 		return nil, fmt.Errorf("no secret found for issuer %s", issuerRef)
 	}
 
 	crlData, ok := secret.Data["crl"].(string)
 	if !ok || crlData == "" {
-		log.Errorf("CRL data missing or invalid for issuer %s", issuerRef)
 		return nil, fmt.Errorf("crl data missing or invalid for issuer %s", issuerRef)
 	}
 
 	block, _ := pem.Decode([]byte(crlData))
 	if block == nil {
-		log.Errorf("Failed to parse PEM block for issuer %s. Raw PEM data: %s", issuerRef, crlData)
 		return nil, fmt.Errorf("failed to parse PEM block for issuer %s", issuerRef)
 	}
 
@@ -195,7 +190,6 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 
 	crl, err := x509.ParseRevocationList(block.Bytes)
 	if err != nil {
-		log.Errorf("Error parsing CRL for issuer %s: %v", issuerRef, err)
 		return nil, fmt.Errorf("error parsing CRL for issuer %s: %w", issuerRef, err)
 	}
 
