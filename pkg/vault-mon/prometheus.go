@@ -25,13 +25,6 @@ var labelNames = []string{
 	"locality",
 }
 
-type PromMetrics struct {
-	expiry    *prometheus.GaugeVec
-	age       *prometheus.GaugeVec
-	startdate *prometheus.GaugeVec
-	enddate   *prometheus.GaugeVec
-}
-
 func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_cert_expiry",
