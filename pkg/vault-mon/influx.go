@@ -36,8 +36,10 @@ func InfluxWatchCerts(pkimon *PKIMon, interval time.Duration, loop bool) {
 
 func influxProcessData(pkimon *PKIMon) {
 	for pkiname, pki := range pkimon.GetPKIs() {
-		if crl := pki.GetCRL(); crl != nil {
-			printCrlInfluxPoint(pkiname, crl)
+		for _, crl := range pki.GetCRLs() {
+			if crl != nil {
+				printCrlInfluxPoint(pkiname, crl)
+			}
 		}
 		for _, cert := range pki.GetCerts() {
 			printCertificateInfluxPoint(pkiname, cert)
