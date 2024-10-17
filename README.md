@@ -89,3 +89,17 @@ level=error msg="failed to get certificate for pki/26:97:08:32:44:40:30:de:11:5z
 ```
 
 Your batch size is probably too high.
+
+## Contributing
+
+### Testing
+
+Venom is used for tests, run `sudo venom run tests.yml` to perform integration tests.
+
+Unit tests would also most likely be welcome for contribution with go native tests.
+
+### Local Builds
+
+Simply run the docker compose setup - `sudo docker compose up --build`.
+
+You can navigate to the Vault UI locally at `http://localhost:8200` and use the root token value of `thisisatokenvalue` to login, as Vault is running in dev mode. It'll setup some initial settings for you with `vault-setup.sh.`
