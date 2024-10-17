@@ -76,14 +76,14 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 				for _, crl := range pki.GetCRLs() {
 					if crl != nil {
 						// issuer string is vanity, such as CN=my-website.com
-						issuer := crl.TBSCertList.Issuer.String()
+						issuer := crl.Issuer.String()
 
-						crl_expiry.WithLabelValues(pkiname, issuer).Set(float64(crl.TBSCertList.NextUpdate.Sub(now).Seconds()))
-						crl_nextupdate.WithLabelValues(pkiname, issuer).Set(float64(crl.TBSCertList.NextUpdate.Unix()))
-						crl_length.WithLabelValues(pkiname, issuer).Set(float64(len(crl.TBSCertList.RevokedCertificates)))
+						crl_expiry.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Sub(now).Seconds()))
+						crl_nextupdate.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Unix()))
+						crl_length.WithLabelValues(pkiname, issuer).Set(float64(len(crl.RevokedCertificates)))
 						crl_byte_size.WithLabelValues(pkiname, issuer).Set(float64(pki.crlRawSize))
 						// gather revoked certs from the CRL so we can exclude their metrics later
-						for _, revokedCert := range crl.TBSCertList.RevokedCertificates {
+						for _, revokedCert := range crl.RevokedCertificates {
 							revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
 						}
 					}

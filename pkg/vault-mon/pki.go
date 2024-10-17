@@ -2,7 +2,6 @@ package vault_mon
 
 import (
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"sync"
@@ -20,7 +19,7 @@ import (
 type PKI struct {
 	path                string
 	certs               map[string]*x509.Certificate
-	crls                map[string]*pkix.CertificateList
+	crls                map[string]*x509.RevocationList
 	crlRawSize          int
 	expiredCertsCounter int
 	vault               *vaultapi.Client
@@ -119,7 +118,7 @@ func (pki *PKI) loadCrl() error {
 	}
 
 	if pki.crls == nil {
-		pki.crls = make(map[string]*pkix.CertificateList)
+		pki.crls = make(map[string]*x509.RevocationList)
 		log.Warningln("init an empty certs list")
 	}
 	// Step 2: Load CRL for each issuer
@@ -171,7 +170,7 @@ func (pki *PKI) listIssuers() ([]string, error) {
 	return issuers, nil
 }
 
-func (pki *PKI) loadCrlForIssuer(issuerRef string) (*pkix.CertificateList, error) {
+func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error) {
 	secret, err := pki.vault.Logical().Read(fmt.Sprintf("/%s/issuer/%s/crl", pki.path, issuerRef))
 	if err != nil {
 		return nil, fmt.Errorf("error finding CRL at /%s/issuer/%s/crl: %w", pki.path, issuerRef, err)
@@ -200,7 +199,7 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*pkix.CertificateList, error
 
 	pki.crlRawSize = len([]byte(crlData))
 
-	crl, err := x509.ParseCRL(block.Bytes)
+	crl, err := x509.ParseRevocationList(block.Bytes)
 	if err != nil {
 		log.Errorf("Error parsing CRL for issuer %s: %v", issuerRef, err)
 		return nil, fmt.Errorf("error parsing CRL for issuer %s: %w", issuerRef, err)
@@ -327,7 +326,7 @@ func (pki *PKI) clearCerts() {
 	pki.certsmux.Unlock()
 }
 
-func (pki *PKI) GetCRLs() map[string]*pkix.CertificateList {
+func (pki *PKI) GetCRLs() map[string]*x509.RevocationList {
 	pki.crlmux.Lock()
 	defer pki.crlmux.Unlock()
 	return pki.crls

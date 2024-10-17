@@ -2,12 +2,12 @@ package vault_mon
 
 import (
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"fmt"
-	influx "github.com/influxdata/influxdb1-client"
 	"os"
 	"strings"
 	"time"
+
+	influx "github.com/influxdata/influxdb1-client"
 )
 
 var hostname string
@@ -72,7 +72,7 @@ func printCertificateInfluxPoint(pkiname string, cert *x509.Certificate) {
 	fmt.Println(point.MarshalString())
 }
 
-func printCrlInfluxPoint(pkiname string, crl *pkix.CertificateList) {
+func printCrlInfluxPoint(pkiname string, crl *x509.RevocationList) {
 	now := time.Now()
 	point := influx.Point{
 		Measurement: "x509_crl",
@@ -81,8 +81,8 @@ func printCrlInfluxPoint(pkiname string, crl *pkix.CertificateList) {
 			"source": pkiname,
 		},
 		Fields: map[string]interface{}{
-			"expiry":     int(crl.TBSCertList.NextUpdate.Sub(now).Seconds()),
-			"nextupdate": int(crl.TBSCertList.NextUpdate.Unix()),
+			"expiry":     int(crl.NextUpdate.Sub(now).Seconds()),
+			"nextupdate": int(crl.NextUpdate.Unix()),
 		},
 	}
 	fmt.Println(point.MarshalString())
