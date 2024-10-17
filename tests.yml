@@ -323,7 +323,9 @@ testcases:
           - result.body ShouldContainSubstring common_name="*.second-ca.example.com"
           - result.body ShouldContainSubstring common_name="alt.second-ca.example.com"
           - result.body ShouldNotContainSubstring common_name="revokeme.first-ca.example.com"
-          - result.body ShouldContainSubstring x509_crl_length{source="first-ca/"} 1
+          # CRLs for each issuer
+          - result.body ShouldContainSubstring x509_crl_length{issuer="CN=First CA,OU=WebService,O=example,L=Montreal,ST=QC,C=CA",source="first-ca/"} 1
+          - result.body ShouldContainSubstring x509_crl_length{issuer="CN=Second CA,OU=VPN,O=example2,L=Montreal,ST=QC,C=CA",source="second-ca/"} 0
 
   - name: docker compose down
     steps:
