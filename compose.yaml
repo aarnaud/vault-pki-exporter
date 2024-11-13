@@ -28,6 +28,7 @@ services:
       - ./vault-pki-exporter
       - --fetch-interval=5s
       - --refresh-interval=5s
+      - --verbose=true
     networks:
       - vault-pki-exporter
     ports:

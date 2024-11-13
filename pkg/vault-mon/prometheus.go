@@ -8,6 +8,8 @@ import (
 	"time"
 
 	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -91,7 +93,20 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 					}
 				}
 				for _, cert := range pki.GetCerts() {
+
 					certlabels := getLabelValues(pkiname, cert)
+
+					if viper.GetBool("verbose") {
+						log.WithFields(logrus.Fields{
+							"organizational_unit": cert.Issuer.OrganizationalUnit,
+							"serial_number":       cert.SerialNumber.String(),
+							"common_name":         cert.Subject.CommonName,
+							"organization":        cert.Subject.Organization,
+							"not_before":          cert.NotBefore,
+							"not_after":           cert.NotAfter,
+						}).Infof("cert found")
+					}
+
 					if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
 						// in case we have prior existing metrics, clear them for revoked certs
 						// seems fine to run in case the metrics don't exist or are already deleted too
@@ -99,6 +114,11 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 						age.DeleteLabelValues(certlabels...)
 						startdate.DeleteLabelValues(certlabels...)
 						enddate.DeleteLabelValues(certlabels...)
+
+						if viper.GetBool("verbose") {
+							log.WithField("common_name", cert.Subject.CommonName).Infof("cert found to be revoked")
+						}
+
 						continue
 					}
 
