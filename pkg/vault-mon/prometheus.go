@@ -25,13 +25,6 @@ var labelNames = []string{
 	"locality",
 }
 
-type PromMetrics struct {
-	expiry    *prometheus.GaugeVec
-	age       *prometheus.GaugeVec
-	startdate *prometheus.GaugeVec
-	enddate   *prometheus.GaugeVec
-}
-
 func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_cert_expiry",
@@ -55,18 +48,18 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	}, []string{"source"})
 	crl_expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_expiry",
-	}, []string{"source"})
+	}, []string{"source", "issuer"})
 	crl_nextupdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_nextupdate",
-	}, []string{"source"})
+	}, []string{"source", "issuer"})
 	crl_byte_size := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_byte_size",
 		Help: "Size of raw certificate revocation list pem stored in vault",
-	}, []string{"source"})
+	}, []string{"source", "issuer"})
 	crl_length := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_length",
 		Help: "Length of certificate revocation list",
-	}, []string{"source"})
+	}, []string{"source", "issuer"})
 	promWatchCertsDuration := promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "x509_watch_certs_duration_seconds",
 		Help:    "Duration of promWatchCerts execution",
@@ -80,14 +73,18 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 			revokedCerts := make(map[string]struct{})
 
 			for pkiname, pki := range pkis {
-				if crl := pki.GetCRL(); crl != nil {
-					crl_expiry.WithLabelValues(pkiname).Set(float64(crl.TBSCertList.NextUpdate.Sub(now).Seconds()))
-					crl_nextupdate.WithLabelValues(pkiname).Set(float64(crl.TBSCertList.NextUpdate.Unix()))
-					crl_length.WithLabelValues(pkiname).Set(float64(len(crl.TBSCertList.RevokedCertificates)))
-					crl_byte_size.WithLabelValues(pkiname).Set(float64(pki.crlRawSize))
-					// gather revoked certs from the CRL so we can exclude their metrics later
-					for _, revokedCert := range crl.TBSCertList.RevokedCertificates {
-						revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
+				for _, crl := range pki.GetCRLs() {
+					if crl != nil {
+						issuer := crl.Issuer.CommonName
+
+						crl_expiry.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Sub(now).Seconds()))
+						crl_nextupdate.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Unix()))
+						crl_length.WithLabelValues(pkiname, issuer).Set(float64(len(crl.RevokedCertificates)))
+						crl_byte_size.WithLabelValues(pkiname, issuer).Set(float64(pki.crlRawSize))
+						// gather revoked certs from the CRL so we can exclude their metrics later
+						for _, revokedCert := range crl.RevokedCertificates {
+							revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
+						}
 					}
 				}
 				for _, cert := range pki.GetCerts() {

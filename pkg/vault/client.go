@@ -116,11 +116,11 @@ func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 					time.Sleep(time.Duration(secret.LeaseDuration) * time.Second)
 					secret, err = vault.Client.Logical().Read(path)
 					if err != nil {
-						log.Errorln("[vault]", err)
+						log.Error("[vault]", err)
 						continue
 					}
 					if secret == nil {
-						log.Errorln("[vault] secret not found : %s", path)
+						log.Errorf("[vault] secret not found : %s", path)
 						continue
 					}
 					fn(secret)

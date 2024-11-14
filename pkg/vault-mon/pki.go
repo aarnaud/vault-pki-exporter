@@ -2,7 +2,6 @@ package vault_mon
 
 import (
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
 	"sync"
@@ -20,7 +19,7 @@ import (
 type PKI struct {
 	path                string
 	certs               map[string]*x509.Certificate
-	crl                 *pkix.CertificateList
+	crls                map[string]*x509.RevocationList
 	crlRawSize          int
 	expiredCertsCounter int
 	vault               *vaultapi.Client
@@ -111,31 +110,92 @@ func (mon *PKIMon) GetPKIs() map[string]*PKI {
 func (pki *PKI) loadCrl() error {
 	pki.crlmux.Lock()
 	defer pki.crlmux.Unlock()
-	secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/crl", pki.path))
+
+	// List all issuers to get multiple CRLs per PKI engine
+	issuers, err := pki.listIssuers()
 	if err != nil {
 		return err
 	}
 
-	// avoids a segfault
-	if secret == nil || secret.Data == nil {
-		return nil
+	if pki.crls == nil {
+		pki.crls = make(map[string]*x509.RevocationList)
+		log.Warningln("init an empty certs list")
 	}
 
-	secretCert := vault.SecretCertificate{}
-	err = mapstructure.Decode(secret.Data, &secretCert)
-	if err != nil {
-		return err
+	for _, issuerRef := range issuers {
+		crl, err := pki.loadCrlForIssuer(issuerRef)
+		if err != nil {
+			log.Errorf("loadCrl() failed to load CRL for issuer %s, error: %v", issuerRef, err)
+		} else if crl == nil {
+			log.Errorf("CRL cannot be loaded for issuer %s", issuerRef)
+		} else {
+			pki.crls[issuerRef] = crl
+		}
 	}
-	block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
-	pki.crlRawSize = len([]byte(secretCert.Certificate))
-	crl, err := x509.ParseCRL(block.Bytes)
-	if err != nil {
-		log.Errorf("failed to load CRL for %s, error: %w", pki.path, err)
-		return err
-	}
-	pki.crl = crl
 
 	return nil
+}
+
+func (pki *PKI) listIssuers() ([]string, error) {
+
+	// Request PKI engine Vault issuers
+	secret, err := pki.vault.Logical().List(fmt.Sprintf("%s/issuers", pki.path))
+	if err != nil {
+		return nil, fmt.Errorf("error listing issuers: %w", err)
+	}
+
+	if secret == nil || secret.Data == nil {
+		return []string{}, nil
+	}
+
+	// The key under which issuers are listed might vary, so adjust "keys" accordingly
+	issuerRefs, ok := secret.Data["keys"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("failed to parse issuer list")
+	}
+
+	issuers := make([]string, len(issuerRefs))
+	for i, ref := range issuerRefs {
+		issuer, ok := ref.(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid issuer reference type")
+		}
+		issuers[i] = issuer
+	}
+
+	return issuers, nil
+}
+
+func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error) {
+	secret, err := pki.vault.Logical().Read(fmt.Sprintf("/%s/issuer/%s/crl", pki.path, issuerRef))
+	if err != nil {
+		return nil, fmt.Errorf("error finding CRL at /%s/issuer/%s/crl: %w", pki.path, issuerRef, err)
+	}
+
+	if secret == nil {
+		return nil, fmt.Errorf("no secret found for issuer %s", issuerRef)
+	}
+
+	crlData, ok := secret.Data["crl"].(string)
+	if !ok || crlData == "" {
+		return nil, fmt.Errorf("crl data missing or invalid for issuer %s", issuerRef)
+	}
+
+	block, _ := pem.Decode([]byte(crlData))
+	if block == nil {
+		return nil, fmt.Errorf("failed to parse PEM block for issuer %s", issuerRef)
+	}
+
+	pki.crlRawSize = len([]byte(crlData))
+
+	crl, err := x509.ParseRevocationList(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing CRL for issuer %s: %w", issuerRef, err)
+	}
+
+	log.Debugf("Successfully loaded CRL for issuer %s", issuerRef)
+
+	return crl, nil
 }
 
 func (pki *PKI) loadCerts() error {
@@ -254,10 +314,10 @@ func (pki *PKI) clearCerts() {
 	pki.certsmux.Unlock()
 }
 
-func (pki *PKI) GetCRL() *pkix.CertificateList {
+func (pki *PKI) GetCRLs() map[string]*x509.RevocationList {
 	pki.crlmux.Lock()
 	defer pki.crlmux.Unlock()
-	return pki.crl
+	return pki.crls
 }
 
 func (pki *PKI) GetCerts() map[string]*x509.Certificate {

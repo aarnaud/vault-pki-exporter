@@ -323,7 +323,9 @@ testcases:
           - result.body ShouldContainSubstring common_name="*.second-ca.example.com"
           - result.body ShouldContainSubstring common_name="alt.second-ca.example.com"
           - result.body ShouldNotContainSubstring common_name="revokeme.first-ca.example.com"
-          - result.body ShouldContainSubstring x509_crl_length{source="first-ca/"} 1
+          # CRLs for each issuer
+          - result.body ShouldContainSubstring x509_crl_length{issuer="my-website.com",source="pki/"} 1
+          - result.body ShouldContainSubstring x509_crl_length{issuer="mysecondwebsite.com",source="pki/"} 0
 
   - name: docker compose down
     steps:

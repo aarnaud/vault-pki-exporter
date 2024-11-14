@@ -18,7 +18,7 @@ vault secrets enable pki
 
 vault secrets tune -max-lease-ttl=87600h pki
 
- vault write pki/root/generate/internal \
+vault write pki/root/generate/internal \
     common_name=my-website.com \
     ttl=8760h
 
@@ -44,5 +44,18 @@ vault write pki/issue/example-dot-com \
     common_name=www.my-website.com
 
 vault read pki/crl/rotate
+
+# make non-default second issuer
+# help test getting multiple CRLs
+ vault write pki/root/generate/internal \
+    common_name=mysecondwebsite.com \
+    ttl=8760h \
+    issuer_name=second
+
+vault write pki/roles/second-role \
+    allowed_domains=mysecondwebsite.com \
+    allow_subdomains=true \
+    max_ttl=72h \
+    issuer_ref=second
 
 tail -f /dev/null
