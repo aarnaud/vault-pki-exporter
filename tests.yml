@@ -9,7 +9,7 @@ testcases:
   - name: docker compose up
     steps:
       - type: exec
-        script: docker compose up --build -d --wait
+        script: docker compose up --build -d --wait --force-recreate
   - name: vaultStatus
     steps:
       - name: vaultHealth
@@ -303,9 +303,9 @@ testcases:
 
   - name: testMetrics
     steps:
-      - name: wait 10s
+      - name: wait 20s
         type: exec
-        script: sleep 10
+        script: sleep 20
       - name: validateMetrics
         type: http
         method: GET
@@ -325,7 +325,11 @@ testcases:
           - result.body ShouldNotContainSubstring common_name="revokeme.first-ca.example.com"
           # CRLs for each issuer
           - result.body ShouldContainSubstring x509_crl_length{issuer="my-website.com",source="pki/"} 1
-          - result.body ShouldContainSubstring x509_crl_length{issuer="mysecondwebsite.com",source="pki/"} 0
+          - result.body ShouldContainSubstring x509_crl_length{issuer="Second CA",source="second-ca/"} 0
+          # Certificate metrics for certs with same CN but multiple OUs
+          # https://github.com/ovh/venom/issues/700#issuecomment-1635502233
+          - result.body ShouldMatchRegex '(?m).*x509_cert_age{common_name="www.duplicate-ou-cert.my-website.com",country="",locality="",organization="",organizational_unit="Foo",province="",serial=".*",source="pki\/"}.*'
+          - result.body ShouldMatchRegex '(?m).*x509_cert_age{common_name="www.duplicate-ou-cert.my-website.com",country="",locality="",organization="",organizational_unit="Bar",province="",serial=".*",source="pki\/"}.*'
 
   - name: docker compose down
     steps:
