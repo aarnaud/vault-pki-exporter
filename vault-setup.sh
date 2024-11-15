@@ -29,19 +29,32 @@ vault write pki/config/urls \
 
 vault write pki/config/crl expiry="400h"
 
-vault write pki/roles/example-dot-com \
+# make two roles with different OUs to ensure we get metrics for the same CN with different OUs
+vault write pki/roles/foo-role \
     allowed_domains=my-website.com \
     allow_subdomains=true \
-    max_ttl=72h
+    max_ttl=72h \
+    ou="Foo"
+
+vault write pki/roles/bar-role \
+    allowed_domains=my-website.com \
+    allow_subdomains=true \
+    max_ttl=72h \
+    ou="Bar"
 
 apk add jq
-# test revoking a certificate for CRL metrics
-CERT_OUTPUT=$(vault write -format=json pki/issue/example-dot-com common_name=www.revokme.my-website.com)
+
+# Test revoking a certificate for CRL metrics
+CERT_OUTPUT=$(vault write -format=json pki/issue/foo-role common_name=www.revokme.my-website.com)
 CERT_SERIAL=$(echo $CERT_OUTPUT | jq -r '.data.serial_number')
 vault write pki/revoke serial_number="$CERT_SERIAL"
 
-vault write pki/issue/example-dot-com \
-    common_name=www.my-website.com
+# issue 2 certs with same CNs but different OUs - want metrics for both
+vault write pki/issue/foo-role \
+    common_name=www.duplicate-ou-cert.my-website.com
+
+vault write pki/issue/bar-role \
+    common_name=www.duplicate-ou-cert.my-website.com
 
 vault read pki/crl/rotate
 
