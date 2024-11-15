@@ -95,36 +95,44 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 					}
 				}
 
-				for _, cert := range pki.GetCerts() {
-					certlabels := getLabelValues(pkiname, cert)
-					if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
-						// in case we have prior existing metrics, clear them for revoked certs
-						// seems fine to run in case the metrics don't exist or are already deleted too
-						expiry.DeleteLabelValues(certlabels...)
-						age.DeleteLabelValues(certlabels...)
-						startdate.DeleteLabelValues(certlabels...)
-						enddate.DeleteLabelValues(certlabels...)
-						slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
-						continue
+				for commonName, orgUnits := range pki.GetCerts() {
+					for orgUnit, cert := range orgUnits {
+
+						certlabels := getLabelValues(pkiname, cert)
+
+						slog.Debug("cert found")
+
+						if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
+							// in case we have prior existing metrics, clear them for revoked certs
+							// seems fine to run in case the metrics don't exist or are already deleted too
+							expiry.DeleteLabelValues(certlabels...)
+							age.DeleteLabelValues(certlabels...)
+							startdate.DeleteLabelValues(certlabels...)
+							enddate.DeleteLabelValues(certlabels...)
+
+							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", commonName, "organizational_unit", orgUnit)
+
+							continue
+						}
+
+						expiry.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Sub(now).Seconds()))
+						age.WithLabelValues(certlabels...).Set(float64(now.Sub(cert.NotBefore).Seconds()))
+						startdate.WithLabelValues(certlabels...).Set(float64(cert.NotBefore.Unix()))
+						enddate.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Unix()))
+
+						slog.Debug("Updated certificate metrics", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 					}
+					certcount.WithLabelValues(pkiname).Set(float64(len(pki.certs)))
+					expired_cert_count.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
 
-					expiry.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Sub(now).Seconds()))
-					age.WithLabelValues(certlabels...).Set(float64(now.Sub(cert.NotBefore).Seconds()))
-					startdate.WithLabelValues(certlabels...).Set(float64(cert.NotBefore.Unix()))
-					enddate.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Unix()))
-
-					slog.Debug("Updated certificate metrics", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+					slog.Info("PKI metrics updated", "pki", pkiname, "total_certs", len(pki.certs), "expired_certs", pki.expiredCertsCounter)
 				}
 
-				certcount.WithLabelValues(pkiname).Set(float64(len(pki.certs)))
-				expired_cert_count.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
-				slog.Info("PKI metrics updated", "pki", pkiname, "total_certs", len(pki.certs), "expired_certs", pki.expiredCertsCounter)
+				duration := time.Since(startTime).Seconds()
+				promWatchCertsDuration.Observe(duration)
+				slog.Info("PromWatchCerts loop completed", "duration_seconds", duration, "pkis_processed", len(pkis))
+				time.Sleep(interval)
 			}
-
-			duration := time.Since(startTime).Seconds()
-			promWatchCertsDuration.Observe(duration)
-			slog.Info("PromWatchCerts loop completed", "duration_seconds", duration, "pkis_processed", len(pkis))
-			time.Sleep(interval)
 		}
 	}()
 }

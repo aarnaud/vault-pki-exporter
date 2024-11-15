@@ -18,7 +18,7 @@ import (
 
 type PKI struct {
 	path                string
-	certs               map[string]*x509.Certificate
+	certs               map[string]map[string]*x509.Certificate
 	crls                map[string]*x509.RevocationList
 	crlRawSize          int
 	expiredCertsCounter int
@@ -62,7 +62,7 @@ func (mon *PKIMon) loadPKI() error {
 	for name, mount := range mounts {
 		if mount.Type == "pki" {
 			if _, ok := mon.pkis[name]; !ok {
-				pki := PKI{path: name, vault: mon.vault}
+				pki := PKI{path: name, vault: mon.vault, certs: make(map[string]map[string]*x509.Certificate)}
 				mon.pkis[name] = &pki
 				slog.Info("PKI loaded", "pki", pki.path)
 			}
@@ -205,7 +205,7 @@ func (pki *PKI) loadCerts() error {
 	defer pki.certsmux.Unlock()
 
 	if pki.certs == nil {
-		pki.certs = make(map[string]*x509.Certificate)
+		pki.certs = make(map[string]map[string]*x509.Certificate)
 		slog.Warn("Initialized an empty certs list", "pki", pki.path)
 	}
 
@@ -268,7 +268,7 @@ func (pki *PKI) loadCerts() error {
 					return
 				}
 
-				block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
+				block, _ := pem.Decode([]byte(secretCert.Certificate))
 				if block == nil {
 					slog.Error("Failed to decode PEM block", "pki", pki.path, "serial", serial)
 					return
@@ -280,35 +280,44 @@ func (pki *PKI) loadCerts() error {
 					return
 				}
 
+				commonName := cert.Subject.CommonName
+				orgUnit := ""
+				// define certs by their commonName and *Subject* (not issuer) OU
+				if len(cert.Subject.OrganizationalUnit) > 0 {
+					orgUnit = cert.Subject.OrganizationalUnit[0]
+				}
+
 				certsMux.Lock()
-				// if already in map check the expiration
-				if certInMap, ok := pki.certs[cert.Subject.CommonName]; ok && certInMap.NotAfter.Unix() < cert.NotAfter.Unix() {
-					pki.certs[cert.Subject.CommonName] = cert
+				if _, exists := pki.certs[commonName]; !exists {
+					pki.certs[commonName] = make(map[string]*x509.Certificate)
 				}
 
-				if cert.NotAfter.Unix() < time.Now().Unix() {
+				// if cert is in map already or the new cert has a *later* expiration date, update map
+				// handles renewal of existing cert smoothly
+				if existingCert, ok := pki.certs[commonName][orgUnit]; !ok || existingCert.NotAfter.Before(cert.NotAfter) {
+					pki.certs[commonName][orgUnit] = cert
+
+					slog.Debug("Updated certificate in map", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+				}
+
+				if cert.NotAfter.Before(time.Now()) {
 					pki.expiredCertsCounter++
+
+					slog.Debug("Cert rejected as it is expired", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 				}
 
-				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
-					pki.certs[cert.Subject.CommonName] = cert
-					if err != nil {
-						slog.Error("Error adding certificate", "pki", pki.path, "error", err)
-					}
-				}
 				certsMux.Unlock()
 			}(serial)
 		}
 		wg.Wait()
 	}
-
 	loadCertsDuration.Observe(time.Since(startTime).Seconds())
 	return nil
 }
 
 func (pki *PKI) clearCerts() {
 	pki.certsmux.Lock()
-	pki.certs = make(map[string]*x509.Certificate)
+	pki.certs = make(map[string]map[string]*x509.Certificate)
 	pki.certsmux.Unlock()
 }
 
@@ -318,7 +327,7 @@ func (pki *PKI) GetCRLs() map[string]*x509.RevocationList {
 	return pki.crls
 }
 
-func (pki *PKI) GetCerts() map[string]*x509.Certificate {
+func (pki *PKI) GetCerts() map[string]map[string]*x509.Certificate {
 	pki.certsmux.Lock()
 	defer pki.certsmux.Unlock()
 	return pki.certs
