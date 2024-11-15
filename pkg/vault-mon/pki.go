@@ -4,10 +4,10 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
-	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/mitchellh/mapstructure"
@@ -64,7 +64,7 @@ func (mon *PKIMon) loadPKI() error {
 			if _, ok := mon.pkis[name]; !ok {
 				pki := PKI{path: name, vault: mon.vault}
 				mon.pkis[name] = &pki
-				log.Infof("%s loaded", pki.path)
+				slog.Info("PKI loaded", "pki", pki.path)
 			}
 		}
 	}
@@ -72,27 +72,27 @@ func (mon *PKIMon) loadPKI() error {
 }
 
 func (mon *PKIMon) Watch(interval time.Duration) {
-	log.Infoln("Start watching pki certs")
+	slog.Info("Start watching PKI certs")
 
 	go func() {
 		for {
-			log.Infoln("Refresh PKI list")
+			slog.Info("Refresh PKI list")
 			err := mon.loadPKI()
 			if err != nil {
-				log.Errorln(err)
+				slog.Error("Error loading PKI", "error", err)
 			}
 			for _, pki := range mon.pkis {
-				log.Infof("Refresh PKI certificate for %s", pki.path)
+				slog.Info("Refresh PKI certificate", "pki", pki.path)
 				pki.clearCerts()
 
 				err := pki.loadCerts()
 				if err != nil {
-					log.Errorln(err)
+					slog.Error("Error loading certs", "pki", pki.path, "error", err)
 				}
 
 				err = pki.loadCrl()
 				if err != nil {
-					log.Errorln(err)
+					slog.Error("Error loading CRL", "pki", pki.path, "error", err)
 				}
 			}
 			mon.Loaded = true
@@ -119,15 +119,15 @@ func (pki *PKI) loadCrl() error {
 
 	if pki.crls == nil {
 		pki.crls = make(map[string]*x509.RevocationList)
-		log.Warningln("init an empty certs list")
+		slog.Warn("Initialized an empty certs list", "pki", pki.path)
 	}
 
 	for _, issuerRef := range issuers {
 		crl, err := pki.loadCrlForIssuer(issuerRef)
 		if err != nil {
-			log.Errorf("loadCrl() failed to load CRL for issuer %s, error: %v", issuerRef, err)
+			slog.Error("Failed to load CRL", "pki", pki.path, "issuer", issuerRef, "error", err)
 		} else if crl == nil {
-			log.Errorf("CRL cannot be loaded for issuer %s", issuerRef)
+			slog.Error("CRL cannot be loaded", "pki", pki.path, "issuer", issuerRef)
 		} else {
 			pki.crls[issuerRef] = crl
 		}
@@ -178,7 +178,7 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 
 	crlData, ok := secret.Data["crl"].(string)
 	if !ok || crlData == "" {
-		return nil, fmt.Errorf("crl data missing or invalid for issuer %s", issuerRef)
+		return nil, fmt.Errorf("CRL data missing or invalid for issuer %s", issuerRef)
 	}
 
 	block, _ := pem.Decode([]byte(crlData))
@@ -193,7 +193,7 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 		return nil, fmt.Errorf("error parsing CRL for issuer %s: %w", issuerRef, err)
 	}
 
-	log.Debugf("Successfully loaded CRL for issuer %s", issuerRef)
+	slog.Debug("Successfully loaded CRL", "pki", pki.path, "issuer", issuerRef)
 
 	return crl, nil
 }
@@ -206,7 +206,7 @@ func (pki *PKI) loadCerts() error {
 
 	if pki.certs == nil {
 		pki.certs = make(map[string]*x509.Certificate)
-		log.Warningln("init an empty certs list")
+		slog.Warn("Initialized an empty certs list", "pki", pki.path)
 	}
 
 	secret, err := pki.vault.Logical().List(fmt.Sprintf("%scerts", pki.path))
@@ -246,9 +246,7 @@ func (pki *PKI) loadCerts() error {
 		batchKeys := serialsList.Keys[i:end]
 
 		var wg sync.WaitGroup
-		if viper.GetBool("verbose") {
-			log.WithField("batchsize", len(batchKeys)).Infof("processing batch of certs in loadCerts")
-		}
+		slog.Info("Processing batch of certs", "pki", pki.path, "batchsize", len(batchKeys))
 
 		// add a mutex for protecting concurrent access to the certs map
 		var certsMux sync.Mutex
@@ -259,26 +257,26 @@ func (pki *PKI) loadCerts() error {
 
 				secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
 				if err != nil || secret == nil || secret.Data == nil {
-					log.Errorf("failed to get certificate for %s%s, got error: %v", pki.path, serial, err)
+					slog.Error("Failed to get certificate", "pki", pki.path, "serial", serial, "error", err)
 					return
 				}
 
 				secretCert := vault.SecretCertificate{}
 				err = mapstructure.Decode(secret.Data, &secretCert)
 				if err != nil {
-					log.Errorf("failed to decode secret for %s/%s, error: %v", pki.path, serial, err)
+					slog.Error("Failed to decode secret", "pki", pki.path, "serial", serial, "error", err)
 					return
 				}
 
 				block, _ := pem.Decode([]byte([]byte(secretCert.Certificate)))
 				if block == nil {
-					log.Errorf("failed to decode PEM block for %s/%s", pki.path, serial)
+					slog.Error("Failed to decode PEM block", "pki", pki.path, "serial", serial)
 					return
 				}
 
 				cert, err := x509.ParseCertificate(block.Bytes)
 				if err != nil {
-					log.Errorf("failed to load certificate for %s/%s, error: %v", pki.path, serial, err)
+					slog.Error("Failed to load certificate", "pki", pki.path, "serial", serial, "error", err)
 					return
 				}
 
@@ -295,7 +293,7 @@ func (pki *PKI) loadCerts() error {
 				if _, ok := pki.certs[cert.Subject.CommonName]; !ok && cert.NotAfter.Unix() > time.Now().Unix() {
 					pki.certs[cert.Subject.CommonName] = cert
 					if err != nil {
-						log.Errorln(err)
+						slog.Error("Error adding certificate", "pki", pki.path, "error", err)
 					}
 				}
 				certsMux.Unlock()
