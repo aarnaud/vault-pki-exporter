@@ -86,6 +86,9 @@ func main() {
 		slog.Info("Log level initialized", "log-level", viper.GetString("log-level"))
 	}
 
+	// note mix of underscores and dashes
+	slog.Info("CLI flag values", "fetch-interval", viper.GetDuration("fetch_interval"), "refresh-interval", viper.GetDuration("refresh_interval"), "batch-size-percent", viper.GetFloat64("batch_size_percent") )
+
 	err := cli.Execute()
 	if err != nil {
 		log.Fatal("CLI execution failed:", err)
