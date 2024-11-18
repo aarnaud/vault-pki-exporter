@@ -271,7 +271,7 @@ func (pki *PKI) loadCerts() error {
 		batchKeys := serialsList.Keys[i:end]
 
 		var wg sync.WaitGroup
-		slog.Info("Processing batch of certs", "pki", pki.path, "batchsize", len(batchKeys))
+		slog.Info("Processing batch of certs", "pki", pki.path, "batchsize", len(batchKeys), "total_size", len(serialsList.Keys))
 
 		// add a mutex for protecting concurrent access to the certs map
 		var certsMux sync.Mutex
