@@ -60,7 +60,7 @@ vault read pki/crl/rotate
 
 # make non-default second issuer
 # help test getting multiple CRLs
- vault write pki/root/generate/internal \
+vault write pki/root/generate/internal \
     common_name=mysecondwebsite.com \
     ttl=8760h \
     issuer_name=second
@@ -70,5 +70,8 @@ vault write pki/roles/second-role \
     allow_subdomains=true \
     max_ttl=72h \
     issuer_ref=second
+
+vault write pki/issue/second-role \
+    common_name=www.mysecondwebsite.com
 
 tail -f /dev/null
