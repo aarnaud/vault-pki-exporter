@@ -115,6 +115,7 @@ func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 		if secret.LeaseDuration > 0 {
 			go func() {
 				for {
+					slog.Info("Sleeping before refreshing vault", "time", time.Duration(secret.LeaseDuration))
 					time.Sleep(time.Duration(secret.LeaseDuration) * time.Second)
 					secret, err = vault.Client.Logical().Read(path)
 					if err != nil {
@@ -175,6 +176,7 @@ func watch_renewer_vault(renewer *vaultapi.Renewer) {
 	go func() {
 		for {
 			// Prevent loop when secret wasn't renewed before expiration
+			slog.Info("Waiting before calling another renew", "time", time.Second)
 			time.Sleep(time.Second)
 			renewer.Renew()
 		}

@@ -3,6 +3,7 @@ package vault_mon
 import (
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ func InfluxWatchCerts(pkimon *PKIMon, interval time.Duration, loop bool) {
 		go func() {
 			for {
 				influxProcessData(pkimon)
+				slog.Info("Sleeping after processing influx data", "time", interval)
 				time.Sleep(interval)
 			}
 		}()

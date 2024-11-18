@@ -104,6 +104,7 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 				}
 			}
 			mon.Loaded = true
+			slog.Info("Sleeping after refreshing PKI certs", "time", interval)
 			time.Sleep(interval)
 		}
 	}()

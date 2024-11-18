@@ -83,7 +83,7 @@ x509_cert_startdate{common_name="My PKI CA",country="CA",locality="Montreal",org
 
 ## Batch Size
 
-Vault PKI Exporter supports a `--batch-size-percent` flag to batch many requests for individual certificate metrics at once.
+Vault PKI Exporter supports a `--batch-size-percent` flag to batch many requests for individual certificate metrics at once. Each active batch will create a goroutine.
 
 If you are getting many log messages such as:
 
@@ -92,6 +92,10 @@ level=error msg="failed to get certificate for pki/26:97:08:32:44:40:30:de:11:5z
 ```
 
 Your batch size is probably too high.
+
+## Rate Limiting
+
+Rate limiting flags are also added for large Vault installations. These rate limits apply to all batches with a global, shared limit between batches. This is to prevent overloading Vault with many API calls. You may want to set your `--request-limit-burst` roughly equal to `--request-limit` so the token bucket will begin with as many tokens as your limit uses. This is measured in Vault API calls per second.
 
 ## Certificate Selection
 
