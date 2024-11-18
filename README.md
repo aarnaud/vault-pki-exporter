@@ -44,6 +44,8 @@ Flags:
       --refresh-interval duration   How many sec between metrics update (default 1m0s)
       --batch-size-percent          How large of a batch of certificates to get data for at once, supports floats (e.g 0.0 - 100.0) (default 1)
       --log-level                   Set log level (options: info, warn, error, debug)
+      --request-limit float         Token-bucket limiter for number of requests per second to Vault when fetching certs (0 = disabled)
+      --request-limit-burst int     Token-bucket burst limit for number of requests per second to Vault when fetching certs (0 = match 'request-limit' value)
   -v, --verbose                     (deprecated) Enable verbose logging. Defaults to debug level logging
 
 Use " [command] --help" for more information about a command.
