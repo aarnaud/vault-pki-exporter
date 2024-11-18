@@ -128,7 +128,7 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 
 				duration := time.Since(startTime).Seconds()
 				promWatchCertsDuration.Observe(duration)
-				slog.Info("Sleeping after PromWatchCerts loop completed", "duration_seconds", duration, "pkis_processed", len(pkis), "time", interval)
+				slog.Info("Sleeping after PromWatchCerts loop completed", "duration_seconds", duration, "pkis_processed", len(pkis), "interval", interval)
 				time.Sleep(interval)
 			}
 		}

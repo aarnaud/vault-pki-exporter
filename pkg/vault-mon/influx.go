@@ -22,7 +22,7 @@ func InfluxWatchCerts(pkimon *PKIMon, interval time.Duration, loop bool) {
 		go func() {
 			for {
 				influxProcessData(pkimon)
-				slog.Info("Sleeping after processing influx data", "time", interval)
+				slog.Info("Sleeping after processing influx data", "interval", interval)
 				time.Sleep(interval)
 			}
 		}()
