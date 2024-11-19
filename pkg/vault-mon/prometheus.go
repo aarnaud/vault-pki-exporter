@@ -100,6 +100,8 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 
 						certlabels := getLabelValues(pkiname, cert)
 
+						// loadCerts() also excludes revoked certs from the cert map
+						// but this goes an extra step and deletes certificate metrics on every Prometheus refresh interval instead
 						if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
 							// in case we have prior existing metrics, clear them for revoked certs
 							// seems fine to run in case the metrics don't exist or are already deleted too

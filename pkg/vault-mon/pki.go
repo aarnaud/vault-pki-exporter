@@ -292,18 +292,34 @@ func (pki *PKI) loadCerts() error {
 					pki.certs[commonName] = make(map[string]*x509.Certificate)
 				}
 
+				// gather CRLs to determine revoked certs
+				revokedCerts := make(map[string]struct{})
+
+				for _, crl := range pki.GetCRLs() {
+
+					// gather revoked certs from the CRL so we can exclude their metrics later
+					for _, revokedCert := range crl.RevokedCertificates {
+						revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
+					}
+				}
+
+				// if cert is revoked, never add it to the map
+				if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
+					slog.Debug("Cert rejected as it is revoked", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+					return
+				}
+
 				// if cert is in map already or the new cert has a *later* expiration date, update map
 				// handles renewal of existing cert smoothly
 				if existingCert, ok := pki.certs[commonName][orgUnit]; !ok || existingCert.NotAfter.Before(cert.NotAfter) {
 					pki.certs[commonName][orgUnit] = cert
-
 					slog.Debug("Updated certificate in map", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 				}
 
 				if cert.NotAfter.Before(time.Now()) {
 					pki.expiredCertsCounter++
-
 					slog.Debug("Cert rejected as it is expired", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+					// we still want metrics if a cert is expired so don't return
 				}
 
 				certsMux.Unlock()
