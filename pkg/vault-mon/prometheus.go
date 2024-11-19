@@ -3,12 +3,12 @@ package vault_mon
 import (
 	"crypto/x509"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -153,6 +153,6 @@ func PromStartExporter(port int) {
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {
-		log.Fatal("Failed to start Prometheus exporter ", err)
+		logger.SlogFatal("Failed to start Prometheus exporter", "error", err)
 	}
 }

@@ -3,11 +3,11 @@ package vault
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	jwtauth "github.com/hashicorp/vault-plugin-auth-jwt"
 	vaultapi "github.com/hashicorp/vault/api"
 	"github.com/hashicorp/vault/api/auth/kubernetes"
@@ -40,12 +40,12 @@ func (vault *ClientWrapper) Init() {
 	vaultconf := &vaultapi.Config{}
 	err = vaultconf.ReadEnvironment()
 	if err != nil {
-		log.Fatal("Failed to read Vault environment ", err)
+		logger.SlogFatal("Failed to read Vault environment", "error", err)
 	}
 
 	vault.Client, err = vaultapi.NewClient(vaultconf)
 	if err != nil {
-		log.Fatal("[vault] ", err)
+		logger.SlogFatal("[vault] Error creating new client", err)
 	}
 
 	if vault.Client.Token() == "" {
@@ -59,7 +59,7 @@ func (vault *ClientWrapper) Init() {
 
 	token_secret, err := vault.Client.Auth().Token().LookupSelf()
 	if err != nil {
-		log.Fatal("[vault] ", err)
+		logger.SlogFatal("[vault] Error getting a new token", err)
 	}
 	ttl, _ := token_secret.TokenTTL()
 
@@ -70,14 +70,14 @@ func (vault *ClientWrapper) Init() {
 		// Get a renewed token
 		secret, err := vault.Client.Auth().Token().RenewTokenAsSelf(vault.Client.Token(), 0)
 		if err != nil {
-			log.Fatal("[vault] ", err)
+			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
 		token_renewer, err := vault.Client.NewRenewer(&vaultapi.RenewerInput{
 			Secret: secret,
 		})
 		if err != nil {
-			log.Fatal("[vault] ", err)
+			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
 		watch_renewer_vault(token_renewer)
@@ -105,7 +105,7 @@ func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 			Secret: secret,
 		})
 		if err != nil {
-			log.Fatal("[vault] ", err)
+			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
 		watch_renewer_vault(renewer)
@@ -151,7 +151,7 @@ func watch_renewer_vault(renewer *vaultapi.Renewer) {
 			select {
 			case err := <-renewer.DoneCh():
 				if err != nil {
-					log.Fatal("[vault]", err)
+					logger.SlogFatal("[vault] Error renewing token", err)
 				}
 
 				// Renewal is now over
@@ -165,7 +165,7 @@ func watch_renewer_vault(renewer *vaultapi.Renewer) {
 				// LeaseDuration=0 => infinte time but if LeaseDuration < 10s secret wasn't renewed
 				// Strange because Renewable is true
 				if renewal.Secret.LeaseDuration < 10 && renewal.Secret.LeaseDuration != 0 {
-					log.Fatal("[vault] not renewable anymore ", flag)
+					logger.SlogFatal("[vault] Not renewable anymore", flag)
 					renewer.Stop()
 					break
 				}
@@ -193,10 +193,10 @@ func (vault *ClientWrapper) authOIDC() {
 	data["mount"] = mount
 	secret, err := jwthandler.Auth(vault.Client, data)
 	if err != nil {
-		log.Fatal(err.Error())
+		logger.SlogFatal("[vault] Error authing to Vault", err)
 	}
 	if secret == nil || secret.Auth == nil {
-		log.Fatal("Failed to auth with OIDC")
+		logger.SlogFatal("[vault] Failed to auth with OIDC")
 	}
 	vault.Client.SetToken(secret.Auth.ClientToken)
 }
@@ -209,9 +209,9 @@ func (vault *ClientWrapper) authK8S() {
 
 	am, err := kubernetes.NewKubernetesAuth(os.Getenv("VAULT_K8S_ROLE"), kubernetes.WithMountPath(mount))
 	if err != nil {
-		log.Fatal("Failed to create k8s auth method: ", err)
+		logger.SlogFatal("Failed to create k8s auth method", err)
 	}
 	if _, err := vault.Client.Auth().Login(context.Background(), am); err != nil {
-		log.Fatal("Failed to auth with k8s: ", err)
+		logger.SlogFatal("Failed to auth with k8s", err)
 	}
 }
