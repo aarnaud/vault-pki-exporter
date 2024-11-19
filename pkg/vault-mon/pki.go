@@ -377,9 +377,7 @@ func (pki *PKI) GetCRLs() map[string]*x509.RevocationList {
 }
 
 func (pki *PKI) GetCerts() map[string]map[string]*x509.Certificate {
-	// Unlock the mutex, return the certs, then re-lock it
-	pki.certsmux.Unlock()
-	certs := pki.certs
 	pki.certsmux.Lock()
-	return certs
+	defer pki.certsmux.Unlock()
+	return pki.certs
 }
