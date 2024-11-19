@@ -95,8 +95,8 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 					}
 				}
 
-				for commonName, orgUnits := range pki.GetCerts() {
-					for orgUnit, cert := range orgUnits {
+				for _, orgUnits := range pki.GetCerts() {
+					for _, cert := range orgUnits {
 
 						certlabels := getLabelValues(pkiname, cert)
 
@@ -108,7 +108,7 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 							startdate.DeleteLabelValues(certlabels...)
 							enddate.DeleteLabelValues(certlabels...)
 
-							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", commonName, "organizational_unit", orgUnit)
+							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 
 							continue
 						}
