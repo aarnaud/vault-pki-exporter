@@ -29,9 +29,9 @@ services:
       - --fetch-interval=5s
       - --refresh-interval=5s
       - --log-level=debug
-      # 5 requests per second
+      # 20 requests per second
       - --request-limit=20
-      # burst of 75 tokens
+      # burst of 20 tokens
       - --request-limit-burst=20
     networks:
       - vault-pki-exporter
