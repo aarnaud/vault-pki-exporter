@@ -237,6 +237,17 @@ func (pki *PKI) loadCerts() error {
 		batchSize = 1
 	}
 
+	// gather CRLs to determine revoked certs
+	revokedCerts := make(map[string]struct{})
+
+	for _, crl := range pki.GetCRLs() {
+
+		// gather revoked certs from the CRL so we can exclude their metrics later
+		for _, revokedCert := range crl.RevokedCertificates {
+			revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
+		}
+	}
+
 	// loop in batches via waitgroups to make this much faster for large vault installations
 	for i := 0; i < len(serialsList.Keys); i += batchSize {
 		end := i + batchSize
@@ -290,17 +301,6 @@ func (pki *PKI) loadCerts() error {
 				certsMux.Lock()
 				if _, exists := pki.certs[commonName]; !exists {
 					pki.certs[commonName] = make(map[string]*x509.Certificate)
-				}
-
-				// gather CRLs to determine revoked certs
-				revokedCerts := make(map[string]struct{})
-
-				for _, crl := range pki.GetCRLs() {
-
-					// gather revoked certs from the CRL so we can exclude their metrics later
-					for _, revokedCert := range crl.RevokedCertificates {
-						revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
-					}
 				}
 
 				// if cert is revoked, never add it to the map
