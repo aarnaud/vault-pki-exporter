@@ -76,12 +76,12 @@ func init() {
 
 	flags.Float64("request-limit", 0.0, "Token-bucket limiter for number of requests per second to Vault when fetching certs (0 = disabled)")
 	if err := viper.BindPFlag("request_limit", flags.Lookup("request-limit")); err != nil {
-		log.Fatal(err)
+		logger.SlogFatal("Could not bind request-limit flag", "error", err)
 	}
 
 	flags.Int("request-limit-burst", 0, "Token-bucket burst limit for number of requests per second to Vault when fetching certs (0 = match 'request-limit' value)")
 	if err := viper.BindPFlag("request_limit_burst", flags.Lookup("request-limit-burst")); err != nil {
-		log.Fatal(err)
+		logger.SlogFatal("Could not bind request-limit-burst flag", "error", err)
 	}
 }
 
@@ -96,7 +96,7 @@ func main() {
 	}
 
 	// note mix of underscores and dashes
-	slog.Info("CLI flag values", "fetch-interval", viper.GetDuration("fetch_interval"), "refresh-interval", viper.GetDuration("refresh_interval"), "batch-size-percent", viper.GetFloat64("batch_size_percent"), "request-limit", viper.GetFloat64("request_limit"), "request-limit-burst", viper.GetInt("request_limit_burst") )
+	slog.Info("CLI flag values", "fetch-interval", viper.GetDuration("fetch_interval"), "refresh-interval", viper.GetDuration("refresh_interval"), "batch-size-percent", viper.GetFloat64("batch_size_percent"), "request-limit", viper.GetFloat64("request_limit"), "request-limit-burst", viper.GetInt("request_limit_burst"))
 
 	err := cli.Execute()
 	if err != nil {
