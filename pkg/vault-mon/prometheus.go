@@ -3,12 +3,12 @@ package vault_mon
 import (
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	log "github.com/aarnaud/vault-pki-exporter/pkg/logger"
-
+	"github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -72,7 +72,11 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 			now := time.Now()
 			revokedCerts := make(map[string]struct{})
 
+			slog.Debug("Starting new PromWatchCerts loop", "interval_seconds", interval.Seconds(), "pkis_count", len(pkis))
+
 			for pkiname, pki := range pkis {
+				slog.Info("Processing PKI", "pki", pkiname)
+
 				for _, crl := range pki.GetCRLs() {
 					if crl != nil {
 						issuer := crl.Issuer.CommonName
@@ -81,38 +85,56 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 						crl_nextupdate.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Unix()))
 						crl_length.WithLabelValues(pkiname, issuer).Set(float64(len(crl.RevokedCertificates)))
 						crl_byte_size.WithLabelValues(pkiname, issuer).Set(float64(pki.crlRawSize))
+
+						slog.Debug("Updated CRL metrics", "pki", pkiname, "issuer", issuer, "next_update", crl.NextUpdate)
+
 						// gather revoked certs from the CRL so we can exclude their metrics later
 						for _, revokedCert := range crl.RevokedCertificates {
 							revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
 						}
 					}
 				}
-				for _, cert := range pki.GetCerts() {
-					certlabels := getLabelValues(pkiname, cert)
-					if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
-						// in case we have prior existing metrics, clear them for revoked certs
-						// seems fine to run in case the metrics don't exist or are already deleted too
-						expiry.DeleteLabelValues(certlabels...)
-						age.DeleteLabelValues(certlabels...)
-						startdate.DeleteLabelValues(certlabels...)
-						enddate.DeleteLabelValues(certlabels...)
-						continue
+
+				for _, orgUnits := range pki.GetCerts() {
+					for _, cert := range orgUnits {
+
+						certlabels := getLabelValues(pkiname, cert)
+
+						// loadCerts() also excludes revoked certs from the cert map
+						// but this goes an extra step and deletes certificate metrics on every Prometheus refresh interval instead
+						if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
+							// in case we have prior existing metrics, clear them for revoked certs
+							// seems fine to run in case the metrics don't exist or are already deleted too
+							expiry.DeleteLabelValues(certlabels...)
+							age.DeleteLabelValues(certlabels...)
+							startdate.DeleteLabelValues(certlabels...)
+							enddate.DeleteLabelValues(certlabels...)
+
+							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+
+							continue
+						}
+
+						expiry.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Sub(now).Seconds()))
+						age.WithLabelValues(certlabels...).Set(float64(now.Sub(cert.NotBefore).Seconds()))
+						startdate.WithLabelValues(certlabels...).Set(float64(cert.NotBefore.Unix()))
+						enddate.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Unix()))
+
+						slog.Debug("Updated certificate metrics", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 					}
+					certcount.WithLabelValues(pkiname).Set(float64(len(pki.certs)))
+					expired_cert_count.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
 
-					expiry.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Sub(now).Seconds()))
-					age.WithLabelValues(certlabels...).Set(float64(now.Sub(cert.NotBefore).Seconds()))
-					startdate.WithLabelValues(certlabels...).Set(float64(cert.NotBefore.Unix()))
-					enddate.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Unix()))
-
+					slog.Info("PKI metrics updated", "pki", pkiname, "total_certs", len(pki.certs), "expired_certs", pki.expiredCertsCounter)
 				}
-				certcount.WithLabelValues(pkiname).Set(float64(len(pki.certs)))
-				expired_cert_count.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
+
+				duration := time.Since(startTime).Seconds()
+				promWatchCertsDuration.Observe(duration)
+				slog.Info("PromWatchCerts loop completed", "duration_seconds", duration, "pkis_processed", len(pkis))
+				time.Sleep(interval)
 			}
-			promWatchCertsDuration.Observe(time.Since(startTime).Seconds())
-			time.Sleep(interval)
 		}
 	}()
-
 }
 
 func getLabelValues(pkiname string, cert *x509.Certificate) []string {
@@ -129,9 +151,10 @@ func getLabelValues(pkiname string, cert *x509.Certificate) []string {
 }
 
 func PromStartExporter(port int) {
+	slog.Info("Starting Prometheus exporter", "port", port)
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {
-		log.Fatal(err)
+		logger.SlogFatal("Failed to start Prometheus exporter", "error", err)
 	}
 }

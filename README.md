@@ -1,10 +1,10 @@
 # vault-pki-exporter
 
-> Export PKI Certificate and CRL metrics base on dates
+> Exports PKI Certificate and CRL metrics based on certificate metadata and dates
 
 ## Vault integration
 
-Compatibility with all environment variable use by vault cli
+Compatible with all environment variables used by vault cli.
 
 Example:
 
@@ -43,9 +43,10 @@ Flags:
       --prometheus                  Enable prometheus exporter, default if nothing else
       --refresh-interval duration   How many sec between metrics update (default 1m0s)
       --batch-size-percent          How large of a batch of certificates to get data for at once, supports floats (e.g 0.0 - 100.0) (default 1)
-  -v, --verbose                     Enable verbose
+      --log-level                   Set log level (options: info, warn, error, debug)
+  -v, --verbose                     (deprecated) Enable verbose logging. Defaults to debug level logging
 
-Use " [command] --help" for more information about a command.
+Use "[command] --help" for more information about a command.
 ```
 
 ## InfluxDB Line Protocol
@@ -90,11 +91,23 @@ level=error msg="failed to get certificate for pki/26:97:08:32:44:40:30:de:11:5z
 
 Your batch size is probably too high.
 
+## Certificate Selection
+
+Any certificate with a unique subject common name and organizational unit is considered for metrics. If a certificate is renewed in place with the same CN and OU, it will still retain the same time series to avoid false alarms.
+
+Revoked certificates are not considered for metrics and their time series will be deleted when an "active" certificate is deleted.
+
+Expired certificates still retain their time series too.
+
+## PKI Engine Selection
+
+Right now the exporter will find any Vault PKI secrets engines and attempt to get certs for all of them. PKI secrets engines are currently not selectable by the exporter.
+
 ## Contributing
 
 ### Testing
 
-Venom is used for tests, run `sudo venom run tests.yml` to perform integration tests.
+Venom is used for tests, run `sudo venom run tests.yml` to perform integration tests. Make sure you have at least venom version 1.2.0.
 
 Unit tests would also most likely be welcome for contribution with go native tests.
 

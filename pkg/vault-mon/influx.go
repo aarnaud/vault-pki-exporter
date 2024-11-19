@@ -41,8 +41,10 @@ func influxProcessData(pkimon *PKIMon) {
 				printCrlInfluxPoint(pkiname, crl)
 			}
 		}
-		for _, cert := range pki.GetCerts() {
-			printCertificateInfluxPoint(pkiname, cert)
+		for _, orgUnits := range pki.GetCerts() {
+			for _, cert := range orgUnits {
+				printCertificateInfluxPoint(pkiname, cert)
+			}
 		}
 	}
 }
