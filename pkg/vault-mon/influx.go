@@ -43,15 +43,15 @@ func influxProcessData(pkimon *PKIMon) {
 				printCrlInfluxPoint(pkiname, crl)
 			}
 		}
-		for commonName, orgUnits := range pki.GetCerts() {
-			for orgUnit, cert := range orgUnits {
-				printCertificateInfluxPoint(pkiname, commonName, orgUnit, cert)
+		for _, orgUnits := range pki.GetCerts() {
+			for _, cert := range orgUnits {
+				printCertificateInfluxPoint(pkiname, cert)
 			}
 		}
 	}
 }
 
-func printCertificateInfluxPoint(pkiname, commonName, orgUnit string, cert *x509.Certificate) {
+func printCertificateInfluxPoint(pkiname string, cert *x509.Certificate) {
 	now := time.Now()
 	point := influx.Point{
 		Measurement: "x509_cert",
@@ -59,9 +59,9 @@ func printCertificateInfluxPoint(pkiname, commonName, orgUnit string, cert *x509
 			"host":                hostname,
 			"source":              pkiname,
 			"serial":              strings.ReplaceAll(fmt.Sprintf("% x", cert.SerialNumber.Bytes()), " ", "-"),
-			"common_name":         commonName,
+			"common_name":         cert.Subject.CommonName,
 			"organization":        getEmptyStringIfEmpty(cert.Subject.Organization),
-			"organizational_unit": orgUnit,
+			"organizational_unit": getEmptyStringIfEmpty(cert.Subject.OrganizationalUnit),
 			"country":             getEmptyStringIfEmpty(cert.Subject.Country),
 			"province":            getEmptyStringIfEmpty(cert.Subject.Province),
 			"locality":            getEmptyStringIfEmpty(cert.Subject.Locality),

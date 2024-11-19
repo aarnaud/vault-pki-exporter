@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/aarnaud/vault-pki-exporter/pkg/vault"
 	vaultMon "github.com/aarnaud/vault-pki-exporter/pkg/vault-mon"
 	"github.com/spf13/cobra"
@@ -36,42 +36,42 @@ func init() {
 
 	flags.BoolP("verbose", "v", false, "Enable verbose")
 	if err := viper.BindPFlag("verbose", flags.Lookup("verbose")); err != nil {
-		log.Fatal(err)
+		logger.SlogFatal("Could not bind verbose flag", "error", err)
 	}
 
 	flags.String("log-level", "info", "Set log level (options: info, warn, error, debug)")
 	if err := viper.BindPFlag("log-level", flags.Lookup("log-level")); err != nil {
-		log.Fatal("Could not set log level:", err)
+		logger.SlogFatal("Could not bind log-level flag", "error", err)
 	}
 
 	flags.BoolP("prometheus", "", false, "Enable prometheus exporter, default if nothing else")
 	if err := viper.BindPFlag("prometheus", flags.Lookup("prometheus")); err != nil {
-		log.Fatal("Could not bind prometheus flag:", err)
+		logger.SlogFatal("Could not bind prometheus flag", "error", err)
 	}
 
 	flags.BoolP("influx", "", false, "Enable InfluxDB Line Protocol")
 	if err := viper.BindPFlag("influx", flags.Lookup("influx")); err != nil {
-		log.Fatal("Could not bind influx flag:", err)
+		logger.SlogFatal("Could not bind influx flag", "error", err)
 	}
 
 	flags.Int("port", 9333, "Prometheus exporter HTTP port")
 	if err := viper.BindPFlag("port", flags.Lookup("port")); err != nil {
-		log.Fatal("Could not bind port flag:", err)
+		logger.SlogFatal("Could not bind port flag", "error", err)
 	}
 
 	flags.Duration("fetch-interval", time.Minute, "How many sec between fetch certs on vault")
 	if err := viper.BindPFlag("fetch_interval", flags.Lookup("fetch-interval")); err != nil {
-		log.Fatal("Could not bind fetch-interval flag:", err)
+		logger.SlogFatal("Could not bind fetch-interval flag", "error", err)
 	}
 
 	flags.Duration("refresh-interval", time.Minute, "How many sec between metrics update")
 	if err := viper.BindPFlag("refresh_interval", flags.Lookup("refresh-interval")); err != nil {
-		log.Fatal("Could not bind refresh-interval flag:", err)
+		logger.SlogFatal("Could not bind refresh-interval flag", "error", err)
 	}
 
 	flags.Float64("batch-size-percent", 1, "loadCerts batch size percentage, supports floats (e.g 0.0 - 100.0)")
 	if err := viper.BindPFlag("batch_size_percent", flags.Lookup("batch-size-percent")); err != nil {
-		log.Fatal("Could not bind batch-size-percent flag:", err)
+		logger.SlogFatal("Could not bind batch-size-percent flag", "error", err)
 	}
 
 	flags.Float64("request-limit", 0.0, "Token-bucket limiter for number of requests per second to Vault when fetching certs (0 = disabled)")
@@ -90,10 +90,9 @@ func main() {
 
 	// preserve deprecated verbose flag
 	if viper.GetBool("verbose") {
-		setLogLevel("debug")
+		logger.Init("debug")
 	} else {
-		setLogLevel(viper.GetString("log-level"))
-		slog.Info("Log level initialized", "log-level", viper.GetString("log-level"))
+		logger.Init(viper.GetString("log-level"))
 	}
 
 	// note mix of underscores and dashes
@@ -101,7 +100,7 @@ func main() {
 
 	err := cli.Execute()
 	if err != nil {
-		log.Fatal("CLI execution failed:", err)
+		logger.SlogFatal("CLI execution failed", "error", err)
 	}
 }
 
@@ -127,24 +126,4 @@ func entrypoint() {
 	if viper.GetBool("influx") {
 		vaultMon.InfluxWatchCerts(&pkiMon, viper.GetDuration("refresh_interval"), viper.GetBool("prometheus"))
 	}
-}
-
-// https://pkg.go.dev/log/slog#example-SetLogLoggerLevel-Log
-func setLogLevel(level string) {
-	var slogLevel slog.Level
-	switch level {
-	case "debug":
-		slogLevel = slog.LevelDebug
-	case "info":
-		slogLevel = slog.LevelInfo
-	case "warn":
-		slogLevel = slog.LevelWarn
-	case "error":
-		slogLevel = slog.LevelError
-	default:
-		slogLevel = slog.LevelInfo
-	}
-
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel})
-	slog.SetDefault(slog.New(handler))
 }

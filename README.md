@@ -1,10 +1,10 @@
 # vault-pki-exporter
 
-> Export PKI Certificate and CRL metrics base on dates
+> Exports PKI Certificate and CRL metrics based on certificate metadata and dates
 
 ## Vault integration
 
-Compatibility with all environment variable use by vault cli
+Compatible with all environment variables used by vault cli.
 
 Example:
 
@@ -48,7 +48,7 @@ Flags:
       --request-limit-burst int     Token-bucket burst limit for number of requests per second to Vault when fetching certs (0 = match 'request-limit' value)
   -v, --verbose                     (deprecated) Enable verbose logging. Defaults to debug level logging
 
-Use " [command] --help" for more information about a command.
+Use "[command] --help" for more information about a command.
 ```
 
 ## InfluxDB Line Protocol

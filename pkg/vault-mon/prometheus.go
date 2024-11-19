@@ -3,12 +3,12 @@ package vault_mon
 import (
 	"crypto/x509"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -95,11 +95,13 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 					}
 				}
 
-				for commonName, orgUnits := range pki.GetCerts() {
-					for orgUnit, cert := range orgUnits {
+				for _, orgUnits := range pki.GetCerts() {
+					for _, cert := range orgUnits {
 
 						certlabels := getLabelValues(pkiname, cert)
 
+						// loadCerts() also excludes revoked certs from the cert map
+						// but this goes an extra step and deletes certificate metrics on every Prometheus refresh interval instead
 						if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
 							// in case we have prior existing metrics, clear them for revoked certs
 							// seems fine to run in case the metrics don't exist or are already deleted too
@@ -108,7 +110,7 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 							startdate.DeleteLabelValues(certlabels...)
 							enddate.DeleteLabelValues(certlabels...)
 
-							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", commonName, "organizational_unit", orgUnit)
+							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 
 							continue
 						}
@@ -153,6 +155,6 @@ func PromStartExporter(port int) {
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {
-		log.Fatal("Failed to start Prometheus exporter ", err)
+		logger.SlogFatal("Failed to start Prometheus exporter", "error", err)
 	}
 }
