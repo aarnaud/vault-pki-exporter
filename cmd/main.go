@@ -117,23 +117,3 @@ func entrypoint() {
 		vaultMon.InfluxWatchCerts(&pkiMon, viper.GetDuration("refresh_interval"), viper.GetBool("prometheus"))
 	}
 }
-
-// https://pkg.go.dev/log/slog#example-SetLogLoggerLevel-Log
-func setLogLevel(level string) {
-	var slogLevel slog.Level
-	switch level {
-	case "debug":
-		slogLevel = slog.LevelDebug
-	case "info":
-		slogLevel = slog.LevelInfo
-	case "warn":
-		slogLevel = slog.LevelWarn
-	case "error":
-		slogLevel = slog.LevelError
-	default:
-		slogLevel = slog.LevelInfo
-	}
-
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slogLevel})
-	slog.SetDefault(slog.New(handler))
-}
