@@ -1,6 +1,7 @@
 package vault_mon
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/spf13/viper"
+	"golang.org/x/time/rate"
 )
 
 type PKI struct {
@@ -37,6 +39,12 @@ type PKIMon struct {
 var loadCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 	Name:    "x509_load_certs_duration_seconds",
 	Help:    "Duration of loadCerts execution",
+	Buckets: prometheus.ExponentialBuckets(1, 3, 10),
+})
+
+var loadCertsLimitDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "x509_load_certs_request_limit_gated_duration_seconds",
+	Help:    "Duration of time spent throttled waiting to contact Vault during loadCerts execution",
 	Buckets: prometheus.ExponentialBuckets(1, 3, 10),
 })
 
@@ -96,6 +104,7 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 				}
 			}
 			mon.Loaded = true
+			slog.Info("Sleeping after refreshing PKI certs", "interval", interval)
 			time.Sleep(interval)
 		}
 	}()
@@ -237,6 +246,22 @@ func (pki *PKI) loadCerts() error {
 		batchSize = 1
 	}
 
+	requestLimit := rate.Limit(viper.GetFloat64("request_limit"))
+	requestLimitBurst := viper.GetInt("request_limit_burst")
+
+	// Special value for limiter that allows all events
+	if requestLimit == 0 {
+		requestLimit = rate.Inf
+	}
+
+	// If non-default value for requestLimit, but default requestLimitBurst,
+	// set requestLimitBurst to requestLimit
+	if requestLimit != rate.Inf && requestLimitBurst == 0 {
+		requestLimitBurst = int(requestLimit)
+	}
+
+	limiter := rate.NewLimiter(requestLimit, requestLimitBurst)
+
 	// gather CRLs to determine revoked certs
 	revokedCerts := make(map[string]struct{})
 
@@ -257,7 +282,7 @@ func (pki *PKI) loadCerts() error {
 		batchKeys := serialsList.Keys[i:end]
 
 		var wg sync.WaitGroup
-		slog.Info("Processing batch of certs", "pki", pki.path, "batchsize", len(batchKeys))
+		slog.Info("Processing batch of certs", "pki", pki.path, "batchsize", len(batchKeys), "total_size", len(serialsList.Keys))
 
 		// add a mutex for protecting concurrent access to the certs map
 		var certsMux sync.Mutex
@@ -265,6 +290,14 @@ func (pki *PKI) loadCerts() error {
 			wg.Add(1)
 			go func(serial string) {
 				defer wg.Done()
+
+				waitStart := time.Now()
+				err := limiter.Wait(context.Background())
+				if err != nil {
+					slog.Error("Error waiting for request limiter", "error", err)
+					return
+				}
+				loadCertsLimitDuration.Observe(time.Since(waitStart).Seconds())
 
 				secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
 				if err != nil || secret == nil || secret.Data == nil {
