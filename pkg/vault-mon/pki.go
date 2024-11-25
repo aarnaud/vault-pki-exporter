@@ -269,7 +269,7 @@ func (pki *PKI) loadCerts() error {
 	for _, crl := range pki.GetCRLs() {
 
 		// gather revoked certs from the CRL so we can exclude their metrics later
-		for _, revokedCert := range crl.RevokedCertificates {
+		for _, revokedCert := range crl.RevokedCertificateEntries {
 			revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
 		}
 	}
