@@ -73,7 +73,7 @@ func (vault *ClientWrapper) Init() {
 			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
-		token_renewer, err := vault.Client.NewRenewer(&vaultapi.RenewerInput{
+		token_renewer, err := vault.Client.NewLifetimeWatcher(&vaultapi.RenewerInput{
 			Secret: secret,
 		})
 		if err != nil {
@@ -101,7 +101,7 @@ func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 	fn(secret)
 
 	if secret.Renewable {
-		renewer, err := vault.Client.NewRenewer(&vaultapi.RenewerInput{
+		renewer, err := vault.Client.NewLifetimeWatcher(&vaultapi.RenewerInput{
 			Secret: secret,
 		})
 		if err != nil {
