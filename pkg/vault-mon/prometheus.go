@@ -90,7 +90,23 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 
 						// gather revoked certs from the CRL so we can exclude their metrics later
 						for _, revokedCert := range crl.RevokedCertificates {
+
+							// loadCerts() also excludes revoked certs from the cert map
+							// but this goes an extra step and deletes certificate metrics on every Prometheus refresh interval instead
+							// must not compare to GetCerts() map but just from each CRL load
 							revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
+
+							// Only know serial number natively from revokedCert object
+							labels := prometheus.Labels{
+								"serial": strings.ReplaceAll(fmt.Sprintf("% x", revokedCert.SerialNumber.Bytes()), " ", "-"),
+							}
+
+							expiry.DeletePartialMatch(labels)
+							age.DeletePartialMatch(labels)
+							startdate.DeletePartialMatch(labels)
+							enddate.DeletePartialMatch(labels)
+
+							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", revokedCert.SerialNumber.String())
 						}
 					}
 				}
@@ -99,21 +115,6 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 					for _, cert := range orgUnits {
 
 						certlabels := getLabelValues(pkiname, cert)
-
-						// loadCerts() also excludes revoked certs from the cert map
-						// but this goes an extra step and deletes certificate metrics on every Prometheus refresh interval instead
-						if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
-							// in case we have prior existing metrics, clear them for revoked certs
-							// seems fine to run in case the metrics don't exist or are already deleted too
-							expiry.DeleteLabelValues(certlabels...)
-							age.DeleteLabelValues(certlabels...)
-							startdate.DeleteLabelValues(certlabels...)
-							enddate.DeleteLabelValues(certlabels...)
-
-							slog.Debug("Cleared metrics for revoked certificate", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
-
-							continue
-						}
 
 						expiry.WithLabelValues(certlabels...).Set(float64(cert.NotAfter.Sub(now).Seconds()))
 						age.WithLabelValues(certlabels...).Set(float64(now.Sub(cert.NotBefore).Seconds()))
