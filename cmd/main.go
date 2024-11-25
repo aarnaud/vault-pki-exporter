@@ -86,7 +86,10 @@ func init() {
 }
 
 func main() {
-	cli.ParseFlags(os.Args[1:])
+	err := cli.ParseFlags(os.Args[1:])
+	if err != nil {
+		logger.SlogFatal("CLI parsing failed", "error", err)
+	}
 
 	// preserve deprecated verbose flag
 	if viper.GetBool("verbose") {
@@ -98,7 +101,7 @@ func main() {
 	// note mix of underscores and dashes
 	slog.Info("CLI flag values", "fetch-interval", viper.GetDuration("fetch_interval"), "refresh-interval", viper.GetDuration("refresh_interval"), "batch-size-percent", viper.GetFloat64("batch_size_percent"), "request-limit", viper.GetFloat64("request_limit"), "request-limit-burst", viper.GetInt("request_limit_burst"))
 
-	err := cli.Execute()
+	err = cli.Execute()
 	if err != nil {
 		logger.SlogFatal("CLI execution failed", "error", err)
 	}
