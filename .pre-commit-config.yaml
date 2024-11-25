@@ -21,16 +21,23 @@ repos:
     # Formatters
     #
     -   id: go-fmt
-    -   id: go-fmt-repo
     #
+    #
+    #
+    # Style Checkers
+    #
+    -   id: go-lint
     #
     # GolangCI-Lint
-    # - Fast Multi-Linter
-    # - Can be configured to replace MOST other hooks
-    # - Supports repo config file for configuration
-    # - https://github.com/golangci/golangci-lint
-    #
-    -   id: golangci-lint
-    -   id: golangci-lint-mod
-    -   id: golangci-lint-repo-mod
-
+    # local hook from https://github.com/golangci/golangci-lin>
+    # other versions are outdated
+-   repo: local
+    hooks:
+    - id: golangci-lint
+      name: golangci-lint
+      description: Fast linters runner for Go. Note that only >
+      entry: golangci-lint run --new-from-rev HEAD --fix
+      types: [go]
+      language: golang
+      require_serial: true
+      pass_filenames: false
