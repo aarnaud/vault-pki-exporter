@@ -15,25 +15,31 @@ import (
 )
 
 type secretCallback func(secret *vaultapi.Secret)
-type secretKV2Callback func(secret *KV_version2)
+type secretKV2Callback func(secret *KVVersion2)
+
+// ClientWrapper wraps around vaultapi client
 type ClientWrapper struct {
 	Client *vaultapi.Client
 }
 
-type KV_version2 struct {
+// KVVersion2 is Vault's newer API version structure
+type KVVersion2 struct {
 	Data     map[string]interface{} `json:"data"`
 	Metadata map[string]interface{} `json:"metadata"`
 }
 
+// SecretList is a list of keys
 type SecretList struct {
 	Keys []string
 }
 
+// SecretCertificate is an object of the actual certificate we obtain from Vault
 type SecretCertificate struct {
-	Certificate     string
-	Revocation_time int64
+	Certificate    string
+	RevocationTime int64
 }
 
+// Init makes a new Vault Client Wrapper
 func (vault *ClientWrapper) Init() {
 	var err error
 
@@ -57,15 +63,15 @@ func (vault *ClientWrapper) Init() {
 		}
 	}
 
-	token_secret, err := vault.Client.Auth().Token().LookupSelf()
+	tokenSecret, err := vault.Client.Auth().Token().LookupSelf()
 	if err != nil {
 		logger.SlogFatal("[vault] Error getting a new token", err)
 	}
-	ttl, _ := token_secret.TokenTTL()
+	ttl, _ := tokenSecret.TokenTTL()
 
-	slog.Info("Token TTL and LeaseDuration", "ttl", int32(ttl/time.Second), "lease_duration", token_secret.LeaseDuration)
+	slog.Info("Token TTL and LeaseDuration", "ttl", int32(ttl/time.Second), "lease_duration", tokenSecret.LeaseDuration)
 
-	isRenewable, _ := token_secret.TokenIsRenewable()
+	isRenewable, _ := tokenSecret.TokenIsRenewable()
 	if isRenewable {
 		// Get a renewed token
 		secret, err := vault.Client.Auth().Token().RenewTokenAsSelf(vault.Client.Token(), 0)
@@ -73,20 +79,21 @@ func (vault *ClientWrapper) Init() {
 			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
-		token_renewer, err := vault.Client.NewLifetimeWatcher(&vaultapi.RenewerInput{
+		tokenRenewer, err := vault.Client.NewLifetimeWatcher(&vaultapi.RenewerInput{
 			Secret: secret,
 		})
 		if err != nil {
 			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
-		watch_renewer_vault(token_renewer)
+		watchRenewerVault(tokenRenewer)
 	} else {
-		ttl, _ := token_secret.TokenTTL()
+		ttl, _ := tokenSecret.TokenTTL()
 		slog.Info("[vault] token is not renewable", "ttl", int32(ttl/time.Second))
 	}
 }
 
+// GetSecret finds the secrets to authenticate with Vault
 func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 	var secret *vaultapi.Secret
 	var err error
@@ -108,7 +115,7 @@ func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 			logger.SlogFatal("[vault] Error renewing token", err)
 		}
 
-		watch_renewer_vault(renewer)
+		watchRenewerVault(renewer)
 	} else {
 		slog.Info("[vault] secret is not renewable, use TTL to refresh secret", "path", path)
 		// Refresh secret at the end of Lease
@@ -135,18 +142,19 @@ func (vault *ClientWrapper) GetSecret(path string, fn secretCallback) error {
 	return nil
 }
 
+// GetSecretKV2 gets the Vault auth secret for the KV2 API
 func (vault *ClientWrapper) GetSecretKV2(path string, fn secretKV2Callback) error {
-	var secret_kv2 = &KV_version2{}
+	var secretKv2 = &KVVersion2{}
 	return vault.GetSecret(path, func(secret *vaultapi.Secret) {
-		err := mapstructure.WeakDecode(secret.Data, secret_kv2)
+		err := mapstructure.WeakDecode(secret.Data, secretKv2)
 		if err != nil {
-			slog.Error("Can decode secret as KV version 2", "error", err)
+			slog.Error("Cannot decode secret for KV version 2", "error", err)
 		}
-		fn(secret_kv2)
+		fn(secretKv2)
 	})
 }
 
-func watch_renewer_vault(renewer *vaultapi.Renewer) {
+func watchRenewerVault(renewer *vaultapi.Renewer) {
 	go func() {
 		for {
 			select {

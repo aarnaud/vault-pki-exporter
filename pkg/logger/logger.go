@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// Initialize default logger
+// Init initializes default logger
 func Init(level string) {
 	var slogLevel slog.Level
 	switch level {
