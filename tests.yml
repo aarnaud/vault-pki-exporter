@@ -331,6 +331,69 @@ testcases:
           - result.body ShouldMatchRegex '(?m).*x509_cert_age{common_name="www.duplicate-ou-cert.my-website.com",country="",locality="",organization="",organizational_unit="Foo",province="",serial=".*",source="pki\/"}.*'
           - result.body ShouldMatchRegex '(?m).*x509_cert_age{common_name="www.duplicate-ou-cert.my-website.com",country="",locality="",organization="",organizational_unit="Bar",province="",serial=".*",source="pki\/"}.*'
 
+  - name: generateCertAgainGetMetricsThenRevoke
+    steps:
+      - name: certrevokeme
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/issue/default
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "common_name": "revokeme2.first-ca.example.com"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+        vars:
+          serialNumber:
+            from: result.bodyjson.data.serial_number
+            regex: ".*" # not sure it's worth a proper regex
+            default: "0"
+      - name: wait 20s
+        type: exec
+        script: sleep 20
+      - name: Make sure metrics exist for soon-to-be-revoked-cert
+        type: http
+        method: GET
+        url: {{.exporterURL}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.body ShouldContainSubstring common_name="revokeme2.first-ca.example.com"
+      - name: revokeCert
+        type: http
+        method: POST
+        url: {{.vaultHost}}/v1/first-ca/revoke
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        body: |
+          {
+            "serial_number": "{{.serialNumber}}"
+          }
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: RotateCRL
+        type: http
+        method: GET
+        url: {{.vaultHost}}/v1/first-ca/crl/rotate
+        headers:
+          X-Vault-Token: {{.vaultToken}}
+          Content-Type: application/json
+        assertions:
+          - result.statuscode ShouldEqual 200
+      - name: wait 20s
+        type: exec
+        script: sleep 20
+      - name: Make sure metrics are cleared for revoked cert
+        type: http
+        method: GET
+        url: {{.exporterURL}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.body ShouldNotContainSubstring common_name="revokeme2.first-ca.example.com"
+
   - name: docker compose down
     steps:
       - type: exec
