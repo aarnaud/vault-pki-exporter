@@ -93,15 +93,16 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 				slog.Info("Refresh PKI certificate", "pki", pki.path)
 				pki.clearCerts()
 
+				err = pki.loadCrl()
+				if err != nil {
+					slog.Error("Error loading CRL", "pki", pki.path, "error", err)
+				}
+
 				err := pki.loadCerts()
 				if err != nil {
 					slog.Error("Error loading certs", "pki", pki.path, "error", err)
 				}
 
-				err = pki.loadCrl()
-				if err != nil {
-					slog.Error("Error loading CRL", "pki", pki.path, "error", err)
-				}
 			}
 			mon.Loaded = true
 			slog.Info("Sleeping after refreshing PKI certs", "interval", interval)
