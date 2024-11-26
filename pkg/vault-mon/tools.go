@@ -1,4 +1,4 @@
-package vault_mon
+package vaultmon
 
 func getEmptyStringIfEmpty(data []string) string {
 	if len(data) > 0 {

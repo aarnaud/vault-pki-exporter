@@ -111,6 +111,8 @@ Right now the exporter will find any Vault PKI secrets engines and attempt to ge
 
 ## Contributing
 
+Make sure run `pre-commit install` to install the various pre-commit linter and formatting hooks.
+
 ### Testing
 
 Venom is used for tests, run `sudo venom run tests.yml` to perform integration tests. Make sure you have at least venom version 1.2.0.

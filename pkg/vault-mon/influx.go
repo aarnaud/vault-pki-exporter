@@ -1,4 +1,4 @@
-package vault_mon
+package vaultmon
 
 import (
 	"crypto/x509"
@@ -13,6 +13,7 @@ import (
 
 var hostname string
 
+// InfluxWatchCerts looks for new certificate data
 func InfluxWatchCerts(pkimon *PKIMon, interval time.Duration, loop bool) {
 	hostname = os.Getenv("HOSTNAME")
 	if hostname == "" {

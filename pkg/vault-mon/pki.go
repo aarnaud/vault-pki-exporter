@@ -1,4 +1,4 @@
-package vault_mon
+package vaultmon
 
 import (
 	"context"
@@ -18,6 +18,7 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// PKI has details about the Vault PKI Secrets Engine
 type PKI struct {
 	path                string
 	certs               map[string]map[string]*x509.Certificate
@@ -29,6 +30,7 @@ type PKI struct {
 	crlmux              sync.Mutex
 }
 
+// PKIMon helps watch all the possible PKI secrets engines
 type PKIMon struct {
 	pkis   map[string]*PKI
 	vault  *vaultapi.Client
@@ -48,6 +50,7 @@ var loadCertsLimitDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 	Buckets: prometheus.ExponentialBuckets(1, 3, 10),
 })
 
+// Init makes a new Vault client
 func (mon *PKIMon) Init(vault *vaultapi.Client) error {
 	mon.vault = vault
 	mon.pkis = make(map[string]*PKI)
@@ -79,6 +82,7 @@ func (mon *PKIMon) loadPKI() error {
 	return nil
 }
 
+// Watch is a continuous loop to load cert and CRL data for later analysis
 func (mon *PKIMon) Watch(interval time.Duration) {
 	slog.Info("Start watching PKI certs")
 
@@ -111,6 +115,7 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 	}()
 }
 
+// GetPKIs returns PKI engines
 func (mon *PKIMon) GetPKIs() map[string]*PKI {
 	mon.mux.Lock()
 	defer mon.mux.Unlock()
@@ -371,12 +376,14 @@ func (pki *PKI) clearCerts() {
 	pki.certsmux.Unlock()
 }
 
+// GetCRLs is a thread safe way to return all CRLs used by various PKI engines
 func (pki *PKI) GetCRLs() map[string]*x509.RevocationList {
 	pki.crlmux.Lock()
 	defer pki.crlmux.Unlock()
 	return pki.crls
 }
 
+// GetCerts is a thread safe way to return all certs used by various PKI engines
 func (pki *PKI) GetCerts() map[string]map[string]*x509.Certificate {
 	pki.certsmux.Lock()
 	defer pki.certsmux.Unlock()

@@ -1,4 +1,4 @@
-package vault_mon
+package vaultmon
 
 import (
 	"crypto/x509"
@@ -25,6 +25,7 @@ var labelNames = []string{
 	"locality",
 }
 
+// PromWatchCerts goes through all available certificates and updates metrics about them. Also deletes any certificate time series found in various CRLs
 func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 	expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_cert_expiry",
@@ -42,21 +43,21 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 		Name: "x509_cert_count",
 		Help: "Total count of non-expired certificates including revoked certificates",
 	}, []string{"source"})
-	expired_cert_count := promauto.NewGaugeVec(prometheus.GaugeOpts{
+	expiredCertCount := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_expired_cert_count",
 		Help: "Total count of expired certificates including revoked certificates",
 	}, []string{"source"})
-	crl_expiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
+	crlExpiry := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_expiry",
 	}, []string{"source", "issuer"})
-	crl_nextupdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
+	crlNextupdate := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_nextupdate",
 	}, []string{"source", "issuer"})
-	crl_byte_size := promauto.NewGaugeVec(prometheus.GaugeOpts{
+	crlByteSize := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_byte_size",
 		Help: "Size of raw certificate revocation list pem stored in vault",
 	}, []string{"source", "issuer"})
-	crl_length := promauto.NewGaugeVec(prometheus.GaugeOpts{
+	crlLength := promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "x509_crl_length",
 		Help: "Length of certificate revocation list",
 	}, []string{"source", "issuer"})
@@ -81,10 +82,10 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 					if crl != nil {
 						issuer := crl.Issuer.CommonName
 
-						crl_expiry.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Sub(now).Seconds()))
-						crl_nextupdate.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Unix()))
-						crl_length.WithLabelValues(pkiname, issuer).Set(float64(len(crl.RevokedCertificateEntries)))
-						crl_byte_size.WithLabelValues(pkiname, issuer).Set(float64(pki.crlRawSize))
+						crlExpiry.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Sub(now).Seconds()))
+						crlNextupdate.WithLabelValues(pkiname, issuer).Set(float64(crl.NextUpdate.Unix()))
+						crlLength.WithLabelValues(pkiname, issuer).Set(float64(len(crl.RevokedCertificateEntries)))
+						crlByteSize.WithLabelValues(pkiname, issuer).Set(float64(pki.crlRawSize))
 
 						slog.Debug("Updated CRL metrics", "pki", pkiname, "issuer", issuer, "next_update", crl.NextUpdate)
 
@@ -124,7 +125,7 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 						slog.Debug("Updated certificate metrics", "pki", pkiname, "serial", cert.SerialNumber, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
 					}
 					certcount.WithLabelValues(pkiname).Set(float64(len(pki.certs)))
-					expired_cert_count.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
+					expiredCertCount.WithLabelValues(pkiname).Set(float64(pki.expiredCertsCounter))
 
 				}
 				duration := time.Since(startTime).Seconds()
@@ -149,6 +150,7 @@ func getLabelValues(pkiname string, cert *x509.Certificate) []string {
 	}
 }
 
+// PromStartExporter boots up the HTTP server to provide metrics
 func PromStartExporter(port int) {
 	slog.Info("Starting Prometheus exporter", "port", port)
 	http.Handle("/metrics", promhttp.Handler())
