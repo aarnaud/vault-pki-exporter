@@ -83,12 +83,26 @@ func init() {
 	if err := viper.BindPFlag("request_limit_burst", flags.Lookup("request-limit-burst")); err != nil {
 		logger.SlogFatal("Could not bind request-limit-burst flag", "error", err)
 	}
+
+	flags.BoolP("help", "h", false, "Show help message")
+	if err := viper.BindPFlag("help", flags.Lookup("help")); err != nil {
+		logger.SlogFatal("Could not bind help flag", "error", err)
+	}
+
 }
 
 func main() {
 	err := cli.ParseFlags(os.Args[1:])
 	if err != nil {
 		logger.SlogFatal("CLI parsing failed", "error", err)
+	}
+
+	if viper.GetBool("help") {
+		err := cli.Usage()
+		if err != nil {
+			logger.SlogFatal("Getting CLI usage failed", "error", err)
+		}
+		os.Exit(0)
 	}
 
 	// preserve deprecated verbose flag
