@@ -33,12 +33,18 @@ func init() {
 	cli.AddCommand(cliOptionVersion)
 
 	flags := cli.Flags()
-
 	flags.BoolP("verbose", "v", false, "Enable verbose")
 	if err := viper.BindPFlag("verbose", flags.Lookup("verbose")); err != nil {
 		logger.SlogFatal("Could not bind verbose flag", "error", err)
 	}
-
+	flags.Bool("collect-ca", false, "Enable CA collection")
+	if err := viper.BindPFlag("collect_ca", flags.Lookup("collect-ca")); err != nil {
+		logger.SlogFatal("Could not bind collect-ca flag", "error", err)
+	}
+	flags.Bool("collect-certs", true, "Enable certificate collection")
+	if err := viper.BindPFlag("collect_certs", flags.Lookup("collect-certs")); err != nil {
+		logger.SlogFatal("Could not bind collect-certs flag", "error", err)
+	}
 	flags.String("log-level", "info", "Set log level (options: info, warn, error, debug)")
 	if err := viper.BindPFlag("log-level", flags.Lookup("log-level")); err != nil {
 		logger.SlogFatal("Could not bind log-level flag", "error", err)
@@ -113,7 +119,7 @@ func main() {
 	}
 
 	// note mix of underscores and dashes
-	slog.Info("CLI flag values", "fetch-interval", viper.GetDuration("fetch_interval"), "refresh-interval", viper.GetDuration("refresh_interval"), "batch-size-percent", viper.GetFloat64("batch_size_percent"), "request-limit", viper.GetFloat64("request_limit"), "request-limit-burst", viper.GetInt("request_limit_burst"))
+	slog.Info("CLI flag values", "fetch-interval", viper.GetDuration("fetch_interval"), "refresh-interval", viper.GetDuration("refresh_interval"), "batch-size-percent", viper.GetFloat64("batch_size_percent"), "request-limit", viper.GetFloat64("request_limit"), "request-limit-burst", viper.GetInt("request_limit_burst"), "collect-ca", viper.GetBool("collect_ca"), "collect-certs", viper.GetBool("collect_certs"))
 
 	err = cli.Execute()
 	if err != nil {
@@ -127,7 +133,7 @@ func entrypoint() {
 	vaultcli.Init()
 
 	pkiMon := vaultMon.PKIMon{}
-	err := pkiMon.Init(vaultcli.Client)
+	err := pkiMon.Init(vaultcli.Client, viper.GetBool("collect_ca"), viper.GetBool("collect_certs"))
 	if err != nil {
 		slog.Error("PKIMon initialization failed", "error", err)
 	}
