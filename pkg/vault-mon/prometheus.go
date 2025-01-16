@@ -131,8 +131,8 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 				duration := time.Since(startTime).Seconds()
 				promWatchCertsDuration.Observe(duration)
 				slog.Info("PKI Prometheus metrics updated, sleeping", "pki", pkiname, "total_certs", len(pki.certs), "expired_certs", pki.expiredCertsCounter, "duration_seconds", duration, "interval", interval)
-				time.Sleep(interval)
 			}
+			time.Sleep(interval)
 		}
 	}()
 }

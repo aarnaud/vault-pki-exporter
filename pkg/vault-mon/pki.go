@@ -32,10 +32,12 @@ type PKI struct {
 
 // PKIMon helps watch all the possible PKI secrets engines
 type PKIMon struct {
-	pkis   map[string]*PKI
-	vault  *vaultapi.Client
-	mux    sync.Mutex
-	Loaded bool
+	pkis        map[string]*PKI
+	vault       *vaultapi.Client
+	mux         sync.Mutex
+	Loaded      bool
+	CollectCa   bool
+	CollectCert bool
 }
 
 var loadCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
@@ -44,6 +46,11 @@ var loadCertsDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 	Buckets: prometheus.ExponentialBuckets(1, 3, 10),
 })
 
+var loadCasDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "x509_load_cas_duration_seconds",
+	Help:    "Duration of loadCas execution",
+	Buckets: prometheus.ExponentialBuckets(1, 3, 10),
+})
 var loadCertsLimitDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 	Name:    "x509_load_certs_request_limit_gated_duration_seconds",
 	Help:    "Duration of time spent throttled waiting to contact Vault during loadCerts execution",
@@ -51,9 +58,11 @@ var loadCertsLimitDuration = promauto.NewHistogram(prometheus.HistogramOpts{
 })
 
 // Init makes a new Vault client
-func (mon *PKIMon) Init(vault *vaultapi.Client) error {
+func (mon *PKIMon) Init(vault *vaultapi.Client, collectCa bool, collectCert bool) error {
 	mon.vault = vault
 	mon.pkis = make(map[string]*PKI)
+	mon.CollectCa = collectCa
+	mon.CollectCert = collectCert
 	return nil
 }
 
@@ -94,17 +103,27 @@ func (mon *PKIMon) Watch(interval time.Duration) {
 				slog.Error("Error loading PKI", "error", err)
 			}
 			for _, pki := range mon.pkis {
-				slog.Info("Refresh PKI certificate", "pki", pki.path)
 				pki.clearCerts()
-
-				err = pki.loadCrl()
-				if err != nil {
-					slog.Error("Error loading CRL", "pki", pki.path, "error", err)
+				if mon.CollectCa || mon.CollectCert {
+					err = pki.loadCrl()
+					if err != nil {
+						slog.Error("Error loading CRL", "pki", pki.path, "error", err)
+					}
 				}
+				if mon.CollectCa {
+					slog.Info("Refresh PKI CA certificate", "pki", pki.path)
+					err = pki.loadCas()
+					if err != nil {
+						slog.Error("Error loading CA", "pki", pki.path, "error", err)
+					}
+				}
+				if mon.CollectCert {
+					slog.Info("Refresh PKI certificate", "pki", pki.path)
 
-				err := pki.loadCerts()
-				if err != nil {
-					slog.Error("Error loading certs", "pki", pki.path, "error", err)
+					err := pki.loadCerts()
+					if err != nil {
+						slog.Error("Error loading certs", "pki", pki.path, "error", err)
+					}
 				}
 
 			}
@@ -120,6 +139,117 @@ func (mon *PKIMon) GetPKIs() map[string]*PKI {
 	mon.mux.Lock()
 	defer mon.mux.Unlock()
 	return mon.pkis
+}
+
+func (pki *PKI) getRevokedCertsMap() map[string]struct{} {
+	// gather CRLs to determine revoked certs
+	revokedCerts := make(map[string]struct{})
+
+	for _, crl := range pki.GetCRLs() {
+
+		// gather revoked certs from the CRL so we can exclude their metrics later
+		for _, revokedCert := range crl.RevokedCertificateEntries {
+			revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
+		}
+	}
+	return revokedCerts
+}
+
+func (pki *PKI) loadCas() error {
+
+	startTime := time.Now()
+	pki.certsmux.Lock()
+	defer pki.certsmux.Unlock()
+	issuers, err := pki.listIssuers()
+	if err != nil {
+		return nil
+	}
+	if pki.certs == nil {
+		pki.certs = make(map[string]map[string]*x509.Certificate)
+		slog.Warn("Initialized an empty certs list", "pki", pki.path)
+	}
+	revokedCerts := pki.getRevokedCertsMap()
+	for _, issuerRef := range issuers {
+		local, err := pki.checkIssuerIsLocal(issuerRef)
+		if err != nil {
+			slog.Error("Failed to check issuer", "pki", pki.path, "issuer", issuerRef, "error", err)
+			continue
+		}
+		if !local {
+			continue
+		}
+		cert, err := pki.loadCertFromVault(fmt.Sprintf("/%s/issuer/%s/json", pki.path, issuerRef))
+		if err != nil {
+			slog.Error("Failed to load CA certificate", "pki", pki.path, "issuer", issuerRef, "error", err)
+		}
+
+		commonName := cert.Subject.CommonName
+		orgUnit := ""
+		if len(cert.Subject.OrganizationalUnit) > 0 {
+			orgUnit = cert.Subject.OrganizationalUnit[0]
+		}
+		// I don't think we need locking here as we run in a single routine
+		// pki.casmux.Lock()
+		pki.storeCert(cert, revokedCerts, commonName, orgUnit)
+
+		slog.Debug("Successfully loaded CA cert", "pki", pki.path, "issuer", issuerRef)
+
+	}
+	loadCasDuration.Observe(time.Since(startTime).Seconds())
+	return nil
+}
+
+func (pki *PKI) checkIssuerIsLocal(issuerRef string) (bool, error) {
+	secret, err := pki.vault.Logical().Read(fmt.Sprintf("/%s/issuer/%s", pki.path, issuerRef))
+	if err != nil {
+		return false, fmt.Errorf("error finding CA info at /%s/issuer/%s: %w", pki.path, issuerRef, err)
+	}
+
+	if secret == nil {
+		return false, fmt.Errorf("no secret found for issuer %s", issuerRef)
+	}
+	keyId, ok := secret.Data["key_id"].(string)
+	if !ok {
+		return false, fmt.Errorf("failed to parse issuer key id")
+	}
+	if keyId == "" {
+		slog.Info("Issuer has no Key ID, it's unlikely an issuer local to this mount", "pki", pki.path, "issuer", issuerRef)
+		return false, nil
+	}
+	return true, nil
+}
+
+func (pki *PKI) loadCertFromVault(path string) (*x509.Certificate, error) {
+
+	secret, err := pki.vault.Logical().Read(path)
+	if err != nil {
+		return nil, fmt.Errorf("error finding cert for %s at %s: %w", pki.path, path, err)
+	}
+
+	if secret == nil {
+		return nil, fmt.Errorf("no secret found for certificate for %s at %s", pki.path, path)
+	}
+
+	secretCert := vault.SecretCertificate{}
+	err = mapstructure.Decode(secret.Data, &secretCert)
+	if err != nil {
+		slog.Error("Failed to decode secret", "pki", pki.path, "path", path, "error", err)
+		return nil, fmt.Errorf("Cert data missing or invalid for %s at %s", pki.path, path)
+	}
+
+	block, _ := pem.Decode([]byte(secretCert.Certificate))
+	if block == nil {
+		slog.Error("Failed to decode PEM block", "pki", pki.path, "path", path)
+		return nil, fmt.Errorf("CA cert data missing or invalid for %s at %s", pki.path, path)
+	}
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		slog.Error("Failed to load certificate", "pki", pki.path, "path", path, "error", err)
+		return nil, fmt.Errorf("Failed to load certificate for %s at %s", pki.path, path)
+	}
+
+	return cert, nil
 }
 
 func (pki *PKI) loadCrl() error {
@@ -213,6 +343,32 @@ func (pki *PKI) loadCrlForIssuer(issuerRef string) (*x509.RevocationList, error)
 	return crl, nil
 }
 
+func (pki *PKI) storeCert(cert *x509.Certificate, revokedCerts map[string]struct{}, commonName string, orgUnit string) {
+	if _, exists := pki.certs[commonName]; !exists {
+		pki.certs[commonName] = make(map[string]*x509.Certificate)
+	}
+
+	// if cert is revoked, never add it to the map
+	if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
+		slog.Debug("Cert rejected as it is revoked", "pki", pki.path, "serial", cert.SerialNumber.String(), "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+		return
+	}
+
+	// if cert is in map already or the new cert has a *later* expiration date, update map
+	// handles renewal of existing cert smoothly
+	if existingCert, ok := pki.certs[commonName][orgUnit]; !ok || existingCert.NotAfter.Before(cert.NotAfter) {
+		pki.certs[commonName][orgUnit] = cert
+		slog.Debug("Updated certificate in map", "pki", pki.path, "serial", cert.SerialNumber.String(), "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+	}
+
+	if cert.NotAfter.Before(time.Now()) {
+		pki.expiredCertsCounter++
+		slog.Debug("Cert rejected as it is expired", "pki", pki.path, "serial", cert.SerialNumber.String(), "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
+		// we still want metrics if a cert is expired so don't return
+	}
+
+}
+
 func (pki *PKI) loadCerts() error {
 
 	startTime := time.Now()
@@ -269,16 +425,7 @@ func (pki *PKI) loadCerts() error {
 	limiter := rate.NewLimiter(requestLimit, requestLimitBurst)
 
 	// gather CRLs to determine revoked certs
-	revokedCerts := make(map[string]struct{})
-
-	for _, crl := range pki.GetCRLs() {
-
-		// gather revoked certs from the CRL so we can exclude their metrics later
-		for _, revokedCert := range crl.RevokedCertificateEntries {
-			revokedCerts[revokedCert.SerialNumber.String()] = struct{}{}
-		}
-	}
-
+	revokedCerts := pki.getRevokedCertsMap()
 	// loop in batches via waitgroups to make this much faster for large vault installations
 	for i := 0; i < len(serialsList.Keys); i += batchSize {
 		end := i + batchSize
@@ -305,26 +452,7 @@ func (pki *PKI) loadCerts() error {
 				}
 				loadCertsLimitDuration.Observe(time.Since(waitStart).Seconds())
 
-				secret, err := pki.vault.Logical().Read(fmt.Sprintf("%scert/%s", pki.path, serial))
-				if err != nil || secret == nil || secret.Data == nil {
-					slog.Error("Failed to get certificate", "pki", pki.path, "serial", serial, "error", err)
-					return
-				}
-
-				secretCert := vault.SecretCertificate{}
-				err = mapstructure.Decode(secret.Data, &secretCert)
-				if err != nil {
-					slog.Error("Failed to decode secret", "pki", pki.path, "serial", serial, "error", err)
-					return
-				}
-
-				block, _ := pem.Decode([]byte(secretCert.Certificate))
-				if block == nil {
-					slog.Error("Failed to decode PEM block", "pki", pki.path, "serial", serial)
-					return
-				}
-
-				cert, err := x509.ParseCertificate(block.Bytes)
+				cert, err := pki.loadCertFromVault(fmt.Sprintf("%scert/%s", pki.path, serial))
 				if err != nil {
 					slog.Error("Failed to load certificate", "pki", pki.path, "serial", serial, "error", err)
 					return
@@ -338,29 +466,7 @@ func (pki *PKI) loadCerts() error {
 				}
 
 				certsMux.Lock()
-				if _, exists := pki.certs[commonName]; !exists {
-					pki.certs[commonName] = make(map[string]*x509.Certificate)
-				}
-
-				// if cert is revoked, never add it to the map
-				if _, isRevoked := revokedCerts[cert.SerialNumber.String()]; isRevoked {
-					slog.Debug("Cert rejected as it is revoked", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
-					return
-				}
-
-				// if cert is in map already or the new cert has a *later* expiration date, update map
-				// handles renewal of existing cert smoothly
-				if existingCert, ok := pki.certs[commonName][orgUnit]; !ok || existingCert.NotAfter.Before(cert.NotAfter) {
-					pki.certs[commonName][orgUnit] = cert
-					slog.Debug("Updated certificate in map", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
-				}
-
-				if cert.NotAfter.Before(time.Now()) {
-					pki.expiredCertsCounter++
-					slog.Debug("Cert rejected as it is expired", "pki", pki.path, "serial", serial, "common_name", cert.Subject.CommonName, "organizational_unit", cert.Subject.OrganizationalUnit)
-					// we still want metrics if a cert is expired so don't return
-				}
-
+				pki.storeCert(cert, revokedCerts, commonName, orgUnit)
 				certsMux.Unlock()
 			}(serial)
 		}

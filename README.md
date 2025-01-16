@@ -32,23 +32,24 @@ Usage:
    [command]
 
 Available Commands:
-  help        Help about any command
   version     Print the version.
 
 Flags:
+      --batch-size-percent float    loadCerts batch size percentage, supports floats (e.g 0.0 - 100.0) (default 1)
+      --collect-ca                  Enable CA collection
+      --collect-certs               Enable certificate collection (default true)
       --fetch-interval duration     How many sec between fetch certs on vault (default 1m0s)
-  -h, --help                        help for this command
+  -h, --help                        Show help message
       --influx                      Enable InfluxDB Line Protocol
+      --log-level string            Set log level (options: info, warn, error, debug) (default "info")
       --port int                    Prometheus exporter HTTP port (default 9333)
       --prometheus                  Enable prometheus exporter, default if nothing else
       --refresh-interval duration   How many sec between metrics update (default 1m0s)
-      --batch-size-percent          How large of a batch of certificates to get data for at once, supports floats (e.g 0.0 - 100.0) (default 1)
-      --log-level                   Set log level (options: info, warn, error, debug)
       --request-limit float         Token-bucket limiter for number of requests per second to Vault when fetching certs (0 = disabled)
       --request-limit-burst int     Token-bucket burst limit for number of requests per second to Vault when fetching certs (0 = match 'request-limit' value)
-  -v, --verbose                     (deprecated) Enable verbose logging. Defaults to debug level logging
+  -v, --verbose                     Enable verbose
 
-Use "[command] --help" for more information about a command.
+Use " [command] --help" for more information about a command.
 ```
 
 ## InfluxDB Line Protocol
