@@ -10,6 +10,7 @@ import (
 	"github.com/aarnaud/vault-pki-exporter/pkg/logger"
 	jwtauth "github.com/hashicorp/vault-plugin-auth-jwt"
 	vaultapi "github.com/hashicorp/vault/api"
+	"github.com/hashicorp/vault/api/auth/approle"
 	"github.com/hashicorp/vault/api/auth/kubernetes"
 	"github.com/mitchellh/mapstructure"
 )
@@ -60,6 +61,8 @@ func (vault *ClientWrapper) Init() {
 			vault.authOIDC()
 		case "k8s":
 			vault.authK8S()
+		case "approle":
+			vault.authApprole()
 		}
 	}
 
@@ -218,6 +221,20 @@ func (vault *ClientWrapper) authK8S() {
 	}
 
 	am, err := kubernetes.NewKubernetesAuth(os.Getenv("VAULT_K8S_ROLE"), kubernetes.WithMountPath(mount))
+	if err != nil {
+		logger.SlogFatal("Failed to create k8s auth method", err)
+	}
+	if _, err := vault.Client.Auth().Login(context.Background(), am); err != nil {
+		logger.SlogFatal("Failed to auth with k8s", err)
+	}
+}
+
+func (vault *ClientWrapper) authApprole() {
+	mount := os.Getenv("VAULT_AUTH_MOUNT")
+	if mount == "" {
+		mount = "approle"
+	}
+	am, err := approle.NewAppRoleAuth(os.Getenv("VAULT_ROLE_ID"), &approle.SecretID{FromEnv: "VAULT_SECRET_ID"}, approle.WithMountPath(mount))
 	if err != nil {
 		logger.SlogFatal("Failed to create k8s auth method", err)
 	}
