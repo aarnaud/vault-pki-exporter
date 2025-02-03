@@ -153,6 +153,11 @@ func getLabelValues(pkiname string, cert *x509.Certificate) []string {
 // PromStartExporter boots up the HTTP server to provide metrics
 func PromStartExporter(port int) {
 	slog.Info("Starting Prometheus exporter", "port", port)
+	http.HandleFunc("/healthz",
+		func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "OK")
+		},
+	)
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {
