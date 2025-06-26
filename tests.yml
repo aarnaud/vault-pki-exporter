@@ -10,6 +10,10 @@ testcases:
     steps:
       - type: exec
         script: docker compose up --build -d --wait --force-recreate
+  - name: wait for vault-setup to run
+    steps:
+      - type: exec
+        script: sleep 10
   - name: vaultStatus
     steps:
       - name: vaultHealth
