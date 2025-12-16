@@ -21,13 +21,15 @@ services:
     volumes:
       - ./vault-setup.sh:/vault-setup.sh
     entrypoint: "sh vault-setup.sh"
-  vault-pki-exporter:
+  vault-pki-exporter-certs:
     build:
       dockerfile: Dockerfile
     command:
       - ./vault-pki-exporter
       - --fetch-interval=5s
       - --refresh-interval=5s
+      - --collect-certs=true
+      - --collect-ca=false
       - --log-level=debug
       # 20 requests per second
       - --request-limit=20
@@ -44,3 +46,28 @@ services:
       vault:
         condition: service_healthy
     restart: always
+  vault-pki-exporter-cas:
+      build:
+        dockerfile: Dockerfile
+      command:
+        - ./vault-pki-exporter
+        - --collect-ca=true
+        - --collect-certs=false
+        - --fetch-interval=5s
+        - --refresh-interval=5s
+        - --log-level=debug
+        # 20 requests per second
+        - --request-limit=20
+        # burst of 20 tokens
+        - --request-limit-burst=20
+      networks:
+        - vault-pki-exporter
+      ports:
+        - 9334:9333
+      environment:
+        - VAULT_ADDR=http://vault:8200
+        - VAULT_TOKEN=thisisatokenvalue
+      depends_on:
+        vault:
+          condition: service_healthy
+      restart: always

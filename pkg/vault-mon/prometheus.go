@@ -130,9 +130,11 @@ func PromWatchCerts(pkimon *PKIMon, interval time.Duration) {
 				}
 				duration := time.Since(startTime).Seconds()
 				promWatchCertsDuration.Observe(duration)
-				slog.Info("PKI Prometheus metrics updated, sleeping", "pki", pkiname, "total_certs", len(pki.certs), "expired_certs", pki.expiredCertsCounter, "duration_seconds", duration, "interval", interval)
-				time.Sleep(interval)
+				slog.Info("PKI Prometheus metrics updated", "pki", pkiname, "total_certs", len(pki.certs), "expired_certs", pki.expiredCertsCounter, "duration_seconds", duration, "interval", interval)
 			}
+			duration := time.Since(startTime).Seconds()
+			slog.Info("PKI Prometheus metrics have all been updated, sleeping", "duration_seconds", duration)
+			time.Sleep(interval)
 		}
 	}()
 }
@@ -153,6 +155,11 @@ func getLabelValues(pkiname string, cert *x509.Certificate) []string {
 // PromStartExporter boots up the HTTP server to provide metrics
 func PromStartExporter(port int) {
 	slog.Info("Starting Prometheus exporter", "port", port)
+	http.HandleFunc("/healthz",
+		func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "OK")
+		},
+	)
 	http.Handle("/metrics", promhttp.Handler())
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {

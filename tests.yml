@@ -4,7 +4,8 @@ name: vault-pki-exporter
 vars:
   vaultHost: "http://127.0.0.1:8200"
   vaultToken: "thisisatokenvalue"
-  exporterURL: "http://127.0.0.1:9333/metrics"
+  exporterURLCerts: "http://127.0.0.1:9333/metrics"
+  exporterURLCas: "http://127.0.0.1:9334/metrics"
 testcases:
   - name: docker compose up
     steps:
@@ -305,15 +306,15 @@ testcases:
           - result.statuscode ShouldEqual 200
 
 
-  - name: testMetrics
+  - name: testMetricsCerts
     steps:
       - name: wait 20s
         type: exec
         script: sleep 20
-      - name: validateMetrics
+      - name: validateMetricsCerts
         type: http
         method: GET
-        url: {{.exporterURL}}
+        url: {{.exporterURLCerts}}
         assertions:
           - result.statuscode ShouldEqual 200
           # First CA Root
@@ -334,6 +335,24 @@ testcases:
           # https://github.com/ovh/venom/issues/700#issuecomment-1635502233
           - result.body ShouldMatchRegex '(?m).*x509_cert_age{common_name="www.duplicate-ou-cert.my-website.com",country="",locality="",organization="",organizational_unit="Foo",province="",serial=".*",source="pki\/"}.*'
           - result.body ShouldMatchRegex '(?m).*x509_cert_age{common_name="www.duplicate-ou-cert.my-website.com",country="",locality="",organization="",organizational_unit="Bar",province="",serial=".*",source="pki\/"}.*'
+  - name: testMetricsCAs
+    steps:
+      - name: validateMetricsCas
+        type: http
+        method: GET
+        url: {{.exporterURLCas}}
+        assertions:
+          - result.statuscode ShouldEqual 200
+          - result.body ShouldContainSubstring x509_cert_age{common_name="First CA",country="CA",locality="Montreal",organization="example",organizational_unit="WebService",province="QC"
+          - result.body ShouldContainSubstring x509_cert_age{common_name="Second CA",country="CA",locality="Montreal",organization="example2",organizational_unit="VPN",province="QC"
+          - result.body ShouldContainSubstring x509_cert_enddate{common_name="First CA",country="CA",locality="Montreal",organization="example",organizational_unit="WebService",province="QC"
+          - result.body ShouldContainSubstring x509_cert_enddate{common_name="Second CA",country="CA",locality="Montreal",organization="example2",organizational_unit="VPN",province="QC"
+          - result.body ShouldContainSubstring x509_cert_expiry{common_name="First CA",country="CA",locality="Montreal",organization="example",organizational_unit="WebService",province="QC"
+          - result.body ShouldContainSubstring x509_cert_expiry{common_name="Second CA",country="CA",locality="Montreal",organization="example2",organizational_unit="VPN",province="QC"
+          - result.body ShouldContainSubstring x509_cert_startdate{common_name="First CA",country="CA",locality="Montreal",organization="example",organizational_unit="WebService",province="QC"
+          - result.body ShouldContainSubstring x509_cert_startdate{common_name="Second CA",country="CA",locality="Montreal",organization="example2",organizational_unit="VPN",province="QC"
+          - result.body ShouldNotContainSubstring common_name="*.first-ca.example.com"
+          - result.body ShouldNotContainSubstring common_name="*.second-ca.example.com"
 
   - name: generateCertAgainGetMetricsThenRevoke
     steps:
@@ -361,7 +380,7 @@ testcases:
       - name: Make sure metrics exist for soon-to-be-revoked-cert
         type: http
         method: GET
-        url: {{.exporterURL}}
+        url: {{.exporterURLCerts}}
         assertions:
           - result.statuscode ShouldEqual 200
           - result.body ShouldContainSubstring common_name="revokeme2.first-ca.example.com"
@@ -393,11 +412,10 @@ testcases:
       - name: Make sure metrics are cleared for revoked cert
         type: http
         method: GET
-        url: {{.exporterURL}}
+        url: {{.exporterURLCerts}}
         assertions:
           - result.statuscode ShouldEqual 200
           - result.body ShouldNotContainSubstring common_name="revokeme2.first-ca.example.com"
-
   - name: docker compose down
     steps:
       - type: exec
